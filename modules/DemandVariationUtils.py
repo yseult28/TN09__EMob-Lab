@@ -1,3 +1,5 @@
+
+
 # dependencies
 
 import os
@@ -51,6 +53,10 @@ def display_demand_variation_auto_one(csv_file):
     ----------
     csv_file : str or Path
         Path to the CSV file containing columns 'DEPARTURE' and 'ID'.
+
+    Returns
+    -------
+    None
     """
     csv_file = Path(csv_file)
     if not csv_file.exists():
@@ -148,6 +154,10 @@ def display_origin_destination_maps_one(csv_file, crs="EPSG:4326"):
         Path to the CSV file containing 'ORIGIN', 'DESTINATION', and 'ID' columns.
     crs : str
         Coordinate reference system of the input data (default EPSG:4326).
+
+    Returns
+    -------
+    None
     """
     if not csv_file or not Path(csv_file).exists():
         raise ValueError("Invalid file path or file does not exist.")
@@ -206,6 +216,10 @@ def display_origin_heatmap_time_one(data, crs="EPSG:3857", time_step="2h"):
         Input coordinate reference system (default: EPSG:3857).
     time_step : str, optional
         Time rounding step (e.g., '30min', '1h', '2h').
+
+    Returns
+    -------
+    None
     """
     # Load data
     if isinstance(data, (str, Path)):
@@ -274,6 +288,10 @@ def display_destination_heatmap_time_one(data, crs="EPSG:3857", time_step="2h"):
         Input coordinate reference system (default: EPSG:3857).
     time_step : str, optional
         Time rounding step (e.g., '30min', '1h', '2h').
+
+    Returns
+    -------
+    None
     """
     # Load data
     if isinstance(data, (str, Path)):
@@ -347,6 +365,10 @@ def display_demand_variation(path="",title="",labels=[],cols=0):
         subtitle of each barplot.
     cols : int, optional
         number of barplot per line.
+
+    Returns
+    -------
+    None
     """
     if not path or str(path).strip() == "": 
         logger.error("Invalid or null path.")
@@ -431,6 +453,10 @@ def display_demand_variation_auto(path="", cols=0):
         Path to the folder containing CSV variations.
     cols : int, optional
         Number of subplots per row (default auto).
+
+    Returns
+    -------
+    None
     """
     if not path or str(path).strip() == "": 
         raise ValueError("Invalid or null path.") 
@@ -470,7 +496,7 @@ def display_demand_variation_auto(path="", cols=0):
     variations = []
     for file in files:
         buffer = pd.read_csv(file, sep=';')
-        if "DEPARTURE" not in buffer.columns or "ID" not in buffer.columns:
+        if "DEPARTURE" not in buffer.columns or "ID" not in buffer.columns :
             raise ValueError(f"Missing required columns in file {file.name}")
         buffer["DEPARTURE"] = buffer["DEPARTURE"].str.extract(r'(\d{2}:\d{2}:\d{2})')[0]
         buffer["DEPARTURE"] = pd.to_datetime(buffer["DEPARTURE"], format='%H:%M:%S', errors='coerce')
@@ -521,8 +547,24 @@ import numpy as np
 
 def display_origin_map_auto(path="", cols=0, crs="EPSG:4326"):
     """
-    Displays origin maps for multiple CSV files containing geographic coordinates.
-    Each file is displayed in a separate subplot with distinct colors and a shared point size scale.
+    Display origin maps for multiple CSV files containing geographic coordinates.
+
+    Each file is shown in a separate subplot with distinct colors, 
+    and point sizes are normalized across all files.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        Folder containing CSV files with at least 'ORIGIN' and 'ID' columns.
+    cols : int, optional
+        Number of columns in the subplot grid. If 0 or greater than number of files, defaults to min(3, n_files).
+    crs : str, optional
+        Coordinate Reference System of the CSV data (default is "EPSG:4326").
+
+    Returns
+    -------
+    None
+        Displays a multi-panel map of origin points with sizes proportional to demand counts.
     """
 
     if not path or str(path).strip() == "":
@@ -586,8 +628,24 @@ def display_origin_map_auto(path="", cols=0, crs="EPSG:4326"):
 
 def display_destination_map_auto(path="", cols=0, crs="EPSG:4326"):
     """
-    Displays destination maps for multiple CSV files containing geographic coordinates.
-    Each file is displayed in a separate subplot with distinct colors and a shared point size scale.
+    Display destination maps for multiple CSV files containing geographic coordinates.
+
+    Each file is shown in a separate subplot with distinct colors, 
+    and point sizes are normalized across all files.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        Folder containing CSV files with at least 'DESTINATION' and 'ID' columns.
+    cols : int, optional
+        Number of columns in the subplot grid. If 0 or greater than number of files, defaults to min(3, n_files).
+    crs : str, optional
+        Coordinate Reference System of the CSV data (default is "EPSG:4326").
+
+    Returns
+    -------
+    None
+        Displays a multi-panel map of destination points with sizes proportional to demand counts.
     """
 
     if not path or str(path).strip() == "":

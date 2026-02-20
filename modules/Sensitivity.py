@@ -3,6 +3,8 @@
 # dependencies
 
 import os 
+import sys
+
 from pathlib import Path
 
 import math, re
@@ -12,10 +14,13 @@ import pandas as pd
 
 import copy
 
+import importlib
 
 import logging
 
 from .CopertEstimator import CopertEstimator
+
+importlib.reload(sys.modules['modules.CopertEstimator'])
 
 
 
@@ -90,6 +95,81 @@ def parse_filename(name):
 
     return result
 
+def parse_temporal_filename(name):
+    """
+    Parse a temporal filename formatted as METHOD__LAW__PARAMETERS
+    and extract the corresponding configuration elements.
+
+    Parameters
+    ----------
+    name : str
+        Temporal filename string formatted as:
+        METHOD__LAW__param1_param2[_param3]
+
+        - For Normal law:
+            METHOD__Normal__mean_std
+        - For Beta law:
+            METHOD__Beta__alpha_beta_floor
+
+    Returns
+    -------
+    dict
+        Dictionary containing the parsed elements:
+
+        - For Normal law:
+            {
+                "METHOD": str,
+                "LAW": "Normal",
+                "MEAN": str,
+                "STD": str
+            }
+
+        - For Beta law:
+            {
+                "METHOD": str,
+                "LAW": "Beta",
+                "ALPHA": str,
+                "BETA": str,
+                "FLOOR": str
+            }
+    """
+
+    categories  = name.split("__")
+
+    if len(categories) != 3 : 
+        logger.error("Invalid temporal filename.")
+        raise ValueError("Invalid temporal filename.")
+
+    cat0 = categories[0]
+    cat1 = categories[1]
+    cat2 = categories[2]
+
+    METHOD = cat0
+    LAW = cat1
+
+    if LAW == "Normal" : 
+        PARAMETERS = cat2.split("_")
+        result = {
+            "METHOD" : METHOD,
+            "LAW" : LAW,
+            "MEAN" : PARAMETERS[0],
+            "STD" : PARAMETERS[1]   
+        }
+    elif LAW == "Beta" : 
+        PARAMETERS = cat2.split("_")
+        result = {
+            "METHOD" : METHOD,
+            "LAW" : LAW,
+            "ALPHA" : PARAMETERS[0],
+            "BETA" : PARAMETERS[1],
+            "FLOOR" : PARAMETERS[2]
+        }
+    else : 
+        logger.error("Invalid law.")
+        raise ValueError("Invalid law.")
+
+    return result
+
 
 class Sensitivity:
     """
@@ -134,6 +214,10 @@ class Sensitivity:
         method : str, optionnal
             Speed calculation method name, SPEED uses the mean of the SPEED variable, DISTANCE calculates the relative distance value divided 
             the period (default:"SPEED").
+
+        Returns
+        -------
+        None
         """
 
         # check
@@ -194,6 +278,10 @@ class Sensitivity:
             Path to the copert data file.
         networkmanager : NetworkManager
             NetworkManager object for display purpose, network dfs have to be created.
+
+        Returns
+        -------
+        None
         """
 
         # check
@@ -210,6 +298,8 @@ class Sensitivity:
         CE.copert_estimation(time_period, method)
         nox_original = CE.get_nox(period, area, mobility_services)
         co2_original = CE.get_co2(period, area, mobility_services)
+        speed_original = CE.get_mean_speed(period, area, mobility_services)
+        distance_original = CE.get_mean_distance(period, area, mobility_services)
 
         name = Path(original_outputs_directory).stem
         row = parse_filename(name)
@@ -218,8 +308,12 @@ class Sensitivity:
         row["CO2"] = co2_original
         row["NOX_RATIO"] = 1
         row["CO2_RATIO"] = 1
+        row["MEAN_SPEED"] = nox_original
+        row["MEAN_DISTANCE"] = co2_original
+        row["MEAN_SPEED_RATIO"] = 1
+        row["MEAN_DISTANCE_RATIO"] = 1
 
-        sensitivity_tab = pd.DataFrame(columns=["ORIGIN","START","END","OPERATION","SCALE","TYPE","METHOD","LAW","LAW_PARAMETERS","TOTAL_RATIO","TARGET_CLUSTER","TARGET_CHANGE","NOX","CO2","NOX_RATIO","CO2_RATIO"])
+        sensitivity_tab = pd.DataFrame(columns=["ORIGIN","START","END","OPERATION","SCALE","TYPE","METHOD","LAW","LAW_PARAMETERS","TOTAL_RATIO","TARGET_CLUSTER","TARGET_CHANGE","NOX","CO2","NOX_RATIO","CO2_RATIO","MEAN_SPEED", "DISTANCE_SPEED", "MEAN_SPEED_RATIO", "MEAN_DISTANCE_RATIO"])
 
         sensitivity_tab = pd.DataFrame([row])
 
@@ -237,6 +331,10 @@ class Sensitivity:
             row["CO2"] = CE.get_co2(period, area, mobility_services)
             row["NOX_RATIO"] = row["NOX"]/nox_original
             row["CO2_RATIO"] = row["CO2"]/co2_original
+            row["MEAN_SPEED"] = nox_original
+            row["MEAN_DISTANCE"] = co2_original
+            row["MEAN_SPEED_RATIO"] = 1
+            row["MEAN_DISTANCE_RATIO"] = 1
 
 
             if sensitivity_tab.empty:
@@ -275,6 +373,10 @@ class Sensitivity:
             Path to the copert data file.
         networkmanager : NetworkManager
             NetworkManager object for display purpose, network dfs have to be created.
+
+        Returns
+        -------
+        None
         """
 
         # check
@@ -291,6 +393,8 @@ class Sensitivity:
         CE.copert_estimation(time_period, method)
         nox_original = CE.get_nox(period, area, mobility_services)
         co2_original = CE.get_co2(period, area, mobility_services)
+        speed_original = CE.get_mean_speed(period, area, mobility_services)
+        distance_original = CE.get_mean_distance(period, area, mobility_services)
 
         name = Path(original_outputs_directory).stem
         row = parse_filename(name)
@@ -299,8 +403,12 @@ class Sensitivity:
         row["CO2"] = co2_original
         row["NOX_RATIO"] = 1
         row["CO2_RATIO"] = 1
+        row["MEAN_SPEED"] = nox_original
+        row["MEAN_DISTANCE"] = co2_original
+        row["MEAN_SPEED_RATIO"] = 1
+        row["MEAN_DISTANCE_RATIO"] = 1
 
-        sensitivity_tab = pd.DataFrame(columns=["ORIGIN","START","END","OPERATION","SCALE","TYPE","METHOD","LAW","LAW_PARAMETERS","TOTAL_RATIO","TARGET_CLUSTER","TARGET_CHANGE","NOX","CO2","NOX_RATIO","CO2_RATIO"])
+        sensitivity_tab = pd.DataFrame(columns=["ORIGIN","START","END","OPERATION","SCALE","TYPE","METHOD","LAW","LAW_PARAMETERS","TOTAL_RATIO","TARGET_CLUSTER","TARGET_CHANGE","NOX","CO2","NOX_RATIO","CO2_RATIO","MEAN_SPEED", "DISTANCE_SPEED", "MEAN_SPEED_RATIO", "MEAN_DISTANCE_RATIO"])
 
         sensitivity_tab = pd.DataFrame([row])
 
@@ -320,6 +428,10 @@ class Sensitivity:
             row["CO2"] = CE.get_co2(period, area, mobility_services)
             row["NOX_RATIO"] = row["NOX"]/nox_original
             row["CO2_RATIO"] = row["CO2"]/co2_original
+            row["MEAN_SPEED"] = CE.get_mean_speed(period, area, mobility_services)
+            row["MEAN_DISTANCE"] = CE.get_mean_distance(period, area, mobility_services)
+            row["MEAN_SPEED_RATIO"] = row["MEAN_SPEED"] / speed_original
+            row["MEAN_DISTANCE_RATIO"] = row["MEAN_DISTANCE"] / distance_original
 
             if sensitivity_tab.empty:
                 sensitivity_tab = pd.DataFrame([row])
@@ -330,11 +442,208 @@ class Sensitivity:
         self._sensitivity_df = sensitivity_tab.copy()
 
         logger.info(f"create_sensitivity_df_from_simulation_outputs_file done with copert_dfs_directory : {simulation_outputs_directory}, period : {period}, area : {area}, mobility_services : {mobility_services}, crs : {crs}, copert_data_path : {copert_data_path}, time_period : {time_period}, method : {method}.")
+
+
+    def create_normal_sensitivity_df_from_simulation_outputs_directory(self, original_outputs_directory, simulation_outputs_directory, period=None, area=None, mobility_services=None, crs="epsg:4326", copert_data_path="", time_period="6min", method="SPEED_MEAN"):
+        """
+        Creates the sensitivity df from the simulation outputs directory using given parameters.
+
+        Parameters
+        ----------
+        original_outputs_directory : str
+            Directory to load the original simulation outputs.
+        simulation_outputs_directory : str
+            Directory to load the simulation outputs from.
+        period : None or [str, str]
+            Time period as strings "HH:MM:SS". Only the hour part is used.
+            Example: ["08:00:00", "10:30:00"]
+            If None → entire dataset.
+        area : None or shapely Polygon
+            Spatial filtering polygon.
+        mobility_services : None or list[str]
+            TYPE values to keep.
+        original_outputs_path : str
+            Path to the original outputs' folder.
+        variation_outputs_path : str
+            Path to the variations outputs' folder.
+        copert_data_path : str
+            Path to the copert data file.
+        networkmanager : NetworkManager
+            NetworkManager object for display purpose, network dfs have to be created.
+
+        Returns
+        -------
+        None
+        """
+
+        # check
+
+        if not simulation_outputs_directory or simulation_outputs_directory.strip() == "" : 
+            logger.info("Invalid or null simulation outputs directory.")
+            raise ValueError("Invalid or null simulation outputs directory.")
+
+        if not original_outputs_directory or original_outputs_directory.strip() == "" : 
+            logger.info("Invalid or null original outputs directory.")
+            raise ValueError("Invalid or null original outputs directory.")
+
+        CE = CopertEstimator(str(original_outputs_directory), crs, copert_data_path)
+        CE.copert_estimation(time_period, method)
+        nox_original = CE.get_nox(period, area, mobility_services)
+        co2_original = CE.get_co2(period, area, mobility_services)
+        speed_original = CE.get_mean_speed(period, area, mobility_services)
+        distance_original = CE.get_mean_distance(period, area, mobility_services)
+
+        name = Path(original_outputs_directory).stem
+        row = {"METHOD" : "uniform", "MEAN" : "None", "STD" : "None"}
+
+        row["NOX"] = nox_original
+        row["CO2"] = co2_original
+        row["NOX_RATIO"] = 1
+        row["CO2_RATIO"] = 1
+        row["MEAN_SPEED"] = nox_original
+        row["MEAN_DISTANCE"] = co2_original
+        row["MEAN_SPEED_RATIO"] = 1
+        row["MEAN_DISTANCE_RATIO"] = 1
+        
+
+        sensitivity_tab = pd.DataFrame(columns=["METHOD","MEAN","STD","NOX","CO2","NOX_RATIO","CO2_RATIO", "MEAN_SPEED", "DISTANCE_SPEED", "MEAN_SPEED_RATIO", "MEAN_DISTANCE_RATIO"])
+
+        sensitivity_tab = pd.DataFrame([row])
+
+        folders = [f for f in Path(simulation_outputs_directory).iterdir() if f.is_dir() and not f.name.startswith(".")]
+
+
+        for folder in folders :
+
+            logger.info(f"{folder}")
+            CE = CopertEstimator(str(folder), crs, copert_data_path)
+            CE.copert_estimation(time_period, method)
             
+            name = Path(folder).name
+
+            cat = name.split("__")
             
+            row = {"METHOD" : "normal", "MEAN" : cat[1], "STD" : cat[2]}
+            
+            row["NOX"] = CE.get_nox(period, area, mobility_services)
+            row["CO2"] = CE.get_co2(period, area, mobility_services)
+            row["NOX_RATIO"] = row["NOX"]/nox_original
+            row["CO2_RATIO"] = row["CO2"]/co2_original
+            row["MEAN_SPEED"] = CE.get_mean_speed(period, area, mobility_services)
+            row["MEAN_DISTANCE"] = CE.get_mean_distance(period, area, mobility_services)
+            row["MEAN_SPEED_RATIO"] = row["MEAN_SPEED"] / speed_original
+            row["MEAN_DISTANCE_RATIO"] = row["MEAN_DISTANCE"] / distance_original
+
+            if sensitivity_tab.empty:
+                sensitivity_tab = pd.DataFrame([row])
+            else:
+                sensitivity_tab = pd.concat([sensitivity_tab, pd.DataFrame([row])], ignore_index=True)
+
+    
+        self._sensitivity_df = sensitivity_tab.copy()
+
+        logger.info(f"create_sensitivity_df_from_simulation_outputs_file done with copert_dfs_directory : {simulation_outputs_directory}, period : {period}, area : {area}, mobility_services : {mobility_services}, crs : {crs}, copert_data_path : {copert_data_path}, time_period : {time_period}, method : {method}.")
 
         
     
+    def create_temporal_sensitivity_df_from_simulation_outputs_directory(self, original_outputs_directory, simulation_outputs_directory, period=None, area=None, mobility_services=None, crs="epsg:4326", copert_data_path="", time_period="auto", method="DISTANCE_DIFF"):
+        """
+        Creates the sensitivity df from the simulation outputs directory using given parameters.
+
+        Parameters
+        ----------
+        original_outputs_directory : str
+            Directory to load the original simulation outputs.
+        simulation_outputs_directory : str
+            Directory to load the simulation outputs from.
+        period : None or [str, str]
+            Time period as strings "HH:MM:SS". Only the hour part is used.
+            Example: ["08:00:00", "10:30:00"]
+            If None → entire dataset.
+        area : None or shapely Polygon
+            Spatial filtering polygon.
+        mobility_services : None or list[str]
+            TYPE values to keep.
+        original_outputs_path : str
+            Path to the original outputs' folder.
+        variation_outputs_path : str
+            Path to the variations outputs' folder.
+        copert_data_path : str
+            Path to the copert data file.
+        networkmanager : NetworkManager
+            NetworkManager object for display purpose, network dfs have to be created.
+
+        Returns
+        -------
+        None
+        """
+
+        # check
+
+        if not simulation_outputs_directory or simulation_outputs_directory.strip() == "" : 
+            logger.info("Invalid or null simulation outputs directory.")
+            raise ValueError("Invalid or null simulation outputs directory.")
+
+        if not original_outputs_directory or original_outputs_directory.strip() == "" : 
+            logger.info("Invalid or null original outputs directory.")
+            raise ValueError("Invalid or null original outputs directory.")
+
+        CE = CopertEstimator(str(original_outputs_directory), crs, copert_data_path)
+        CE.copert_estimation(time_period, method)
+        nox_original = CE.get_nox(period, area, mobility_services)
+        co2_original = CE.get_co2(period, area, mobility_services)
+        speed_original = CE.get_mean_speed(period, area, mobility_services)
+        distance_original = CE.get_mean_distance(period, area, mobility_services)
+
+        sensitivity_tab = pd.DataFrame()
+
+        folders = [f for f in Path(simulation_outputs_directory).iterdir() if f.is_dir() and not f.name.startswith(".")]
+
+
+        for folder in folders :
+
+            logger.info(f"{folder}")
+            CE = CopertEstimator(str(folder), crs, copert_data_path)
+            CE.copert_estimation(time_period, method)
+            
+            name = Path(folder).name
+
+            row = parse_temporal_filename(name)
+            
+            row["NOX"] = CE.get_nox(period, area, mobility_services)
+            row["CO2"] = CE.get_co2(period, area, mobility_services)
+            row["NOX_RATIO"] = row["NOX"]/nox_original
+            row["CO2_RATIO"] = row["CO2"]/co2_original
+            row["MEAN_SPEED"] = CE.get_mean_speed(period, area, mobility_services)
+            row["MEAN_DISTANCE"] = CE.get_mean_distance(period, area, mobility_services)
+            row["MEAN_SPEED_RATIO"] = row["MEAN_SPEED"] / speed_original
+            row["MEAN_DISTANCE_RATIO"] = row["MEAN_DISTANCE"] / distance_original
+
+
+            if sensitivity_tab.empty:
+                sensitivity_tab = pd.DataFrame([row])
+            else:
+                sensitivity_tab = pd.concat([sensitivity_tab, pd.DataFrame([row])], ignore_index=True)
+
+        for col in sensitivity_tab:
+            row[col] = 0
+
+        row["METHOD"] = "None"
+        row["LAW"] = "None"
+        row["NOX"] = nox_original
+        row["CO2"] = co2_original
+        row["MEAN_SPEED"] = speed_original
+        row["MEAN_DISTANCE"] = distance_original
+        row["NOX_RATIO"] = 1
+        row["CO2_RATIO"] = 1
+        row["MEAN_SPEED_RATIO"] = 1
+        row["MEAN_DISTANCE_RATIO"] = 1
+
+        sensitivity_tab = pd.concat([sensitivity_tab, pd.DataFrame([row])], ignore_index=True)
+    
+        self._sensitivity_df = sensitivity_tab.copy()
+
+        logger.info(f"create_sensitivity_df_from_simulation_outputs_file done with copert_dfs_directory : {simulation_outputs_directory}, period : {period}, area : {area}, mobility_services : {mobility_services}, crs : {crs}, copert_data_path : {copert_data_path}, time_period : {time_period}, method : {method}.")
 
 
     # getters

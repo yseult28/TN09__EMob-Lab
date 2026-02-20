@@ -38,6 +38,12 @@ from folium.plugins import HeatMapWithTime
 
 import mplcursors
 
+from pathlib import Path
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import plotly.io as pio
+from matplotlib.colors import to_hex
+
 import logging
 
 
@@ -72,7 +78,8 @@ def process_time_variable(df, column="DEPARTURE"):
         if t.startswith("24:"):
             return "00:" + t.split(":", 1)[1]
         return t
-    
+
+    df[column] = df[column].astype(str)
     df[column] = df[column].apply(replace_24_hour)
     df[column] = df[column].str.extract(r'(\d{2}:\d{2}:\d{2})')[0]
     df[column] = pd.to_datetime(df[column], format='%H:%M:%S', errors='coerce')
@@ -165,6 +172,59 @@ def prepare_gdf(df, crs="EPSG:4326"):
     return ori_gdf, dest_gdf
 
 
+import geopandas as gpd
+from shapely.geometry import Point
+from shapely import wkt
+
+def prepare_gdf(df, crs="EPSG:4326"):
+    """
+    Prepare GeoDataFrames for origins and destinations from a DataFrame
+    containing ORIGIN and DESTINATION columns as WKT strings or shapely geometries.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Input DataFrame containing at least ORIGIN and DESTINATION columns,
+        stored either as WKT strings or shapely Point geometries.
+    crs : str or pyproj.CRS, optional
+        Coordinate reference system assigned to the resulting GeoDataFrames
+        (default = "EPSG:4326").
+
+    Returns
+    -------
+    ori_gdf : geopandas.GeoDataFrame
+        GeoDataFrame containing origin geometries (ORIGIN as active geometry).
+    dest_gdf : geopandas.GeoDataFrame
+        GeoDataFrame containing destination geometries (DESTINATION as active geometry).
+    """
+
+    df = df.copy()  # éviter de modifier l'objet original
+
+    # ---- ORIGIN ----
+    if isinstance(df["ORIGIN"].iloc[0], str):
+        df["ORIGIN"] = df["ORIGIN"].apply(wkt.loads)
+
+    # ---- DESTINATION ----
+    if isinstance(df["DESTINATION"].iloc[0], str):
+        df["DESTINATION"] = df["DESTINATION"].apply(wkt.loads)
+
+    # ---- Création GeoDataFrames ----
+    ori_gdf = gpd.GeoDataFrame(
+        df.drop(columns="DESTINATION"),
+        geometry="ORIGIN",
+        crs=crs
+    )
+
+    dest_gdf = gpd.GeoDataFrame(
+        df.drop(columns="ORIGIN"),
+        geometry="DESTINATION",
+        crs=crs
+    )
+
+    return ori_gdf, dest_gdf
+
+
+
 # distribution
 
 
@@ -180,6 +240,10 @@ def display_accumulation_time_distribution(csv_file, title, interval="1min"):
         Title of the plot.
     interval : str
         Temporal aggregation interval, e.g. "1min", "5min", "15min", "30min", "1H".
+
+    Returns
+    -------
+    None
     """
 
     # --- File checks ---
@@ -240,6 +304,10 @@ def display_origindestination_spatial_distribution__(csv_file, title, crs="EPSG:
         Path to the CSV file containing 'ORIGIN', 'DESTINATION', and 'ID' columns.
     crs : str
         Coordinate reference system of the input data (default EPSG:4326).
+
+    Returns
+    -------
+    None
     """
     if not csv_file or not Path(csv_file).exists():
         raise ValueError("Invalid file path or file does not exist.")
@@ -288,16 +356,93 @@ def display_origindestination_spatial_distribution__(csv_file, title, crs="EPSG:
     plt.tight_layout()
     plt.show()
 
+def display_restricted_origindestination_spatial_distribution(csv_file, title, ids=[], crs="EPSG:4326"):
+    """
+    Displays two maps side by side for a single CSV file:
+    - Left: demand by origin
+    - Right: demand by destination
 
+    Parameters
+    ----------
+    csv_file : str or Path
+        Path to the CSV file containing 'ORIGIN', 'DESTINATION', and 'ID' columns.
+    crs : str
+        Coordinate reference system of the input data (default EPSG:4326).
+
+    Returns
+    -------
+    None
+    """
+    if not csv_file or not Path(csv_file).exists():
+        raise ValueError("Invalid file path or file does not exist.")
+
+    if not title or title.strip() == "":
+        logger.error("Invalid or null title.")
+        raise ValueError("Invalid or null title.")
+    
+    # Read data
+    data = pd.read_csv(csv_file, sep=';')
+    data = data[data["ID"].isin(ids)]
+    required_cols = {"ORIGIN", "DESTINATION", "ID"}
+    if not required_cols.issubset(data.columns):
+        raise ValueError(f"Missing required columns in {csv_file}. Expected: {required_cols}")
+
+    # Prepare GeoDataFrames for origin and destination
+    ori_gdf, dest_gdf = prepare_gdf(data, crs=crs)
+
+    # Aggregate counts
+    ori_sum = ori_gdf.groupby("ORIGIN")["ID"].count().reset_index()
+    dest_sum = dest_gdf.groupby("DESTINATION")["ID"].count().reset_index()
+
+    # Replace geometries
+    ori_sum_gdf = gpd.GeoDataFrame(ori_sum, geometry="ORIGIN", crs=crs)
+    dest_sum_gdf = gpd.GeoDataFrame(dest_sum, geometry="DESTINATION", crs=crs)
+
+    # Project to Web Mercator for plotting with basemap
+    ori_sum_gdf = ori_sum_gdf.to_crs("EPSG:3857")
+    dest_sum_gdf = dest_sum_gdf.to_crs("EPSG:3857")
+
+    # Create side-by-side plots
+    fig, ax = plt.subplots(1, 2, figsize=(15, 15))
+
+    # Origins map
+    ori_sum_gdf.plot(ax=ax[0], color="red", edgecolor="black", alpha=1, markersize=ori_sum_gdf["ID"] / 5)
+    ctx.add_basemap(ax[0], source=ctx.providers.OpenStreetMap.Mapnik)
+    ax[0].axis("off")
+    ax[0].set_title("Origin spatial distribution", fontsize=14)
+
+    # Destinations map
+    dest_sum_gdf.plot(ax=ax[1], color="blue", edgecolor="black", alpha=1, markersize=dest_sum_gdf["ID"] / 5)
+    ctx.add_basemap(ax[1], source=ctx.providers.OpenStreetMap.Mapnik)
+    ax[1].axis("off")
+    ax[1].set_title("Destination spatial distribution", fontsize=14)
+
+    plt.suptitle(title, fontsize=16)
+    plt.tight_layout()
+    plt.show()
 
 
 
 
 def display_origindestination_spatial_distribution_plotly(csv_file, title, crs="EPSG:4326"):
     """
-    Displays two side-by-side interactive maps using Plotly with shared point-size scale.
-    Hover shows aggregated demand.
+    Display two side-by-side interactive maps (origins and destinations)
+    using Plotly with a shared marker-size scale based on aggregated demand.
+
+    Parameters
+    ----------
+    csv_file : str or pathlib.Path
+        Path to the CSV file (sep=';') containing ORIGIN, DESTINATION, and ID columns.
+    title : str
+        Title of the figure.
+    crs : str or pyproj.CRS, optional
+        Coordinate reference system of the input geometries (default = "EPSG:4326").
+
+    Returns
+    -------
+    None
     """
+
 
     # --- Load and validate file ---
     csv_file = Path(csv_file)
@@ -385,7 +530,137 @@ def display_origindestination_spatial_distribution_plotly(csv_file, title, crs="
     fig.show()
 
 
+def display_restricted_origindestination_spatial_distribution_plotly(csv_file, title, ids=[],crs="EPSG:4326"):
+    """
+    Display two side-by-side interactive maps (origins and destinations)
+    restricted to a given list of IDs, using Plotly with a shared marker-size scale.
+
+    Parameters
+    ----------
+    csv_file : str or pathlib.Path
+        Path to the CSV file (sep=';') containing ORIGIN, DESTINATION, and ID columns.
+    title : str
+        Title of the figure.
+    ids : list, optional
+        List of ID values used to filter the dataset before aggregation.
+    crs : str or pyproj.CRS, optional
+        Coordinate reference system of the input geometries (default = "EPSG:4326").
+
+    Returns
+    -------
+    None
+    """
+
+
+    # --- Load and validate file ---
+    csv_file = Path(csv_file)
+    if not csv_file.exists():
+        raise ValueError("File not found.")
+
+    data = pd.read_csv(csv_file, sep=';')
+    data = data[data["ID"].isin(ids)]
+    
+    if not {"ORIGIN", "DESTINATION", "ID"}.issubset(data.columns):
+        raise ValueError("Missing columns ORIGIN, DESTINATION, ID")
+
+    # --- Convert origin/destination WKT text to geometry ---
+    ori_gdf, dest_gdf = prepare_gdf(data, crs=crs)
+
+   # --- Aggregate origins ---
+    ori_sum = ori_gdf.groupby("ORIGIN")["ID"].count().reset_index()
+    ori_sum = gpd.GeoDataFrame(ori_sum, geometry="ORIGIN", crs=crs)  # <-- étape indispensable
+    ori_sum = ori_sum.to_crs("EPSG:4326")
+    ori_sum["lon"] = ori_sum.geometry.x
+    ori_sum["lat"] = ori_sum.geometry.y
+
+    # --- Aggregate destinations ---
+    dest_sum = dest_gdf.groupby("DESTINATION")["ID"].count().reset_index()
+    dest_sum = gpd.GeoDataFrame(dest_sum, geometry="DESTINATION", crs=crs)  # <-- idem
+    dest_sum = dest_sum.to_crs("EPSG:4326")
+    dest_sum["lon"] = dest_sum.geometry.x
+    dest_sum["lat"] = dest_sum.geometry.y
+
+    # --- Shared scale for marker size ---
+    max_global = max(ori_sum["ID"].max(), dest_sum["ID"].max())
+
+    def scale_size(x):
+        return 5 + 25 * (x / max_global)
+
+    ori_sizes = ori_sum["ID"].apply(scale_size)
+    dest_sizes = dest_sum["ID"].apply(scale_size)
+
+    # --- Map center ---
+    center_lon = pd.concat([ori_sum["lon"], dest_sum["lon"]]).mean()
+    center_lat = pd.concat([ori_sum["lat"], dest_sum["lat"]]).mean()
+
+    # --- Create subplots ---
+    fig = make_subplots(
+        rows=1, cols=2,
+        subplot_titles=("Origin spatial distribution", "Destination spatial distribution"),
+        specs=[[{"type": "mapbox"}, {"type": "mapbox"}]]
+    )
+
+    # Origins
+    fig.add_trace(
+        go.Scattermapbox(
+            lon=ori_sum["lon"],
+            lat=ori_sum["lat"],
+            mode="markers",
+            marker=dict(size=ori_sizes, color="red", opacity=0.8),
+            customdata=ori_sum["ID"],
+            hovertemplate="<b>Origin</b><br>Demand: %{customdata}<extra></extra>"
+        ),
+        row=1, col=1
+    )
+
+    # Destinations
+    fig.add_trace(
+        go.Scattermapbox(
+            lon=dest_sum["lon"],
+            lat=dest_sum["lat"],
+            mode="markers",
+            marker=dict(size=dest_sizes, color="blue", opacity=0.8),
+            customdata=dest_sum["ID"],
+            hovertemplate="<b>Destination</b><br>Demand: %{customdata}<extra></extra>"
+        ),
+        row=1, col=2
+    )
+
+    # Layout
+    fig.update_layout(
+        height=700,
+        title_text=title,
+        mapbox_style="open-street-map",
+        mapbox=dict(center=dict(lat=center_lat, lon=center_lon), zoom=11),
+        mapbox2=dict(center=dict(lat=center_lat, lon=center_lon), zoom=11),
+        showlegend=False
+    )
+
+    fig.show()
+
+
 def display_origin_spatial_distribution(csv_file, title, crs="EPSG:32631", max_size_value=None):
+    """
+    Display the spatial distribution of origins on an interactive map,
+    with marker size proportional to aggregated demand.
+
+    Parameters
+    ----------
+    csv_file : str or pathlib.Path
+        Path to the CSV file (sep=';') containing ORIGIN, DESTINATION, and ID columns.
+    title : str
+        Title of the figure.
+    crs : str or pyproj.CRS, optional
+        Coordinate reference system of the input geometries (default = "EPSG:32631").
+    max_size_value : int or float, optional
+        Reference maximum value used to scale marker sizes.
+        If None, the maximum aggregated demand is used.
+
+    Returns
+    -------
+    None
+    """
+
     csv_file = Path(csv_file)
     if not csv_file.exists():
         raise FileNotFoundError(csv_file)
@@ -428,6 +703,27 @@ def display_origin_spatial_distribution(csv_file, title, crs="EPSG:32631", max_s
 
 
 def display_destination_spatial_distribution(csv_file, title, crs="EPSG:32631", max_size_value=None):
+    """
+    Display the spatial distribution of destinations on an interactive map,
+    with marker size proportional to aggregated demand.
+
+    Parameters
+    ----------
+    csv_file : str or pathlib.Path
+        Path to the CSV file (sep=';') containing ORIGIN, DESTINATION, and ID columns.
+    title : str
+        Title of the figure.
+    crs : str or pyproj.CRS, optional
+        Coordinate reference system of the input geometries (default = "EPSG:32631").
+    max_size_value : int or float, optional
+        Reference maximum value used to scale marker sizes.
+        If None, the maximum aggregated demand is used.
+
+    Returns
+    -------
+    None
+    """
+
     csv_file = Path(csv_file)
     if not csv_file.exists():
         raise FileNotFoundError(csv_file)
@@ -470,7 +766,7 @@ def display_destination_spatial_distribution(csv_file, title, crs="EPSG:32631", 
 
 
 
-def MFD_comparison(directory):
+def MFD_GridLayers_comparison(directory):
     """
     Load multiple flow.csv files located inside:
         directory / scenario_folder / subfolder / flow.csv
@@ -485,6 +781,15 @@ def MFD_comparison(directory):
 
     Interactive feature (mplcursors):
     Hover over a curve to display its label.
+
+    Parameters
+    ----------
+    directory : str
+        location of the files
+
+    Returns
+    -------
+    None
     """
 
     import os
@@ -595,14 +900,169 @@ def MFD_comparison(directory):
     plt.show()
 
 
+def MFD_LayerLayers_comparison(directory):
+    """
+    Load multiple flow.csv files located inside:
+        directory / scenario_folder / subfolder / flow.csv
+
+    Filter by VEHICLE_TYPE = CAR and plot:
+        - ACCUMULATION vs TIME
+        - SPEED vs TIME
+        - TRIP_LENGTH vs TIME
+
+    Legend name for each scenario is built from directory names:
+        scenario_folder.split('__')[-1].split('_')[0:3]
+
+    Interactive feature (mplcursors):
+    Hover over a curve to display its label.
+
+    Parameters
+    ----------
+    directory : str
+        location of the files
+
+    Returns
+    -------
+    None
+    """
+
+    import os
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    from datetime import datetime
+    import mplcursors
+
+    # List top-level scenario directories
+    scenario_dirs = [f.path for f in os.scandir(directory) if f.is_dir()]
+
+    # === colormap large (256 couleurs distinctes) ===
+    cmap = plt.cm.nipy_spectral
+
+    # Create figure
+    fig, (ax_acc, ax_speed) = plt.subplots(1, 2, figsize=(24, 8))
+
+    handles = []
+    labels = []
+
+    for i, scenario_path in enumerate(scenario_dirs):
+
+        # --- Label construction ---
+        folder_name = os.path.basename(scenario_path)
+
+        try:
+            last_part = folder_name.split("__")[-1]
+
+            label = last_part
+        except:
+            label = folder_name
+
+        # --- Look for flow.csv in subfolders ---
+        subfolders = [f.path for f in os.scandir(scenario_path) if f.is_dir()]
+
+        flow_file = None
+        for sub in subfolders:
+            candidate = os.path.join(sub, "flow.csv")
+            if os.path.isfile(candidate):
+                flow_file = candidate
+                break
+
+        if flow_file is None:
+            print(f"Warning: flow.csv not found in {scenario_path}")
+            continue
+
+        # Load CSV
+        df = pd.read_csv(flow_file, sep=';')
+
+        # Filter CAR
+        df = df[df["VEHICLE_TYPE"] == "CAR"]
+        if df.empty:
+            print(f"Warning: no CAR data in {flow_file}")
+            continue
+
+        # Parse TIME
+        df["TIME"] = df["TIME"].apply(
+            lambda x: datetime.strptime(x, "%H:%M:%S.%f")
+            if "." in x else datetime.strptime(x, "%H:%M:%S")
+        )
+        df = df.sort_values("TIME")
+
+        # === couleur spécifique parmi 256 ===
+        color = cmap(i / max(1, len(scenario_dirs)-1))
+
+        # Plot metrics
+        h = None
+        if "ACCUMULATION" in df.columns:
+            h, = ax_acc.plot(df["TIME"], df["ACCUMULATION"], color=color, label=label)
+
+        if "SPEED" in df.columns:
+            ax_speed.plot(df["TIME"], df["SPEED"], color=color, label=label)
+
+        if h is not None:
+            handles.append(h)
+            labels.append(label)
+
+    # Axis titles
+    ax_acc.set_title("ACCUMULATION vs TIME")
+    ax_acc.set_xlabel("Time")
+    ax_acc.set_ylabel("Accumulation")
+
+    ax_speed.set_title("SPEED vs TIME")
+    ax_speed.set_xlabel("Time")
+    ax_speed.set_ylabel("Speed")
+
+
+    # === Légende sous les figures ===
+    fig.legend(
+        handles, labels,
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.12),
+        ncol=5,
+        fontsize=9
+    )
+
+    # === Interaction: survol = affichage automatique du label ===
+    cursor = mplcursors.cursor(hover=True)
+
+    @cursor.connect("add")
+    def on_add(sel):
+        line = sel.artist
+        label = line.get_label()
+        sel.annotation.set_text(label)
+        sel.annotation.get_bbox_patch().set(alpha=0.9)
+
+    plt.tight_layout(rect=(0, 0.05, 1, 1))
+    plt.show()
 
 
 
-import pandas as pd
-import plotly.graph_objs as go
-from shapely.geometry import Point
 
 def display_origin_time_distribution(csv_file, title, crs, interval="15min", max_size=20, zoom=11):
+    """
+    Display an animated interactive map of origin demand over time,
+    with marker size proportional to aggregated demand for each time interval.
+
+    Parameters
+    ----------
+    csv_file : str or pathlib.Path
+        Path to the CSV file (sep=';') containing ORIGIN, DESTINATION, ID,
+        and DEPARTURE columns.
+    title : str
+        Title of the figure.
+    crs : str or pyproj.CRS
+        Coordinate reference system of the input geometries.
+    interval : str, optional
+        Time rounding frequency applied to DEPARTURE (e.g., "15min", "30min", "1H").
+        Default = "15min".
+    max_size : int or float, optional
+        Maximum marker size used for scaling demand (default = 20).
+    zoom : int, optional
+        Initial zoom level of the map (default = 11).
+
+    Returns
+    -------
+    None
+    """
+
     df = pd.read_csv(csv_file, sep=';')
 
     # Extraction et conversion du temps
@@ -695,6 +1155,32 @@ def display_origin_time_distribution(csv_file, title, crs, interval="15min", max
 
 
 def display_destination_time_distribution(csv_file, title, crs, interval="15min", max_size=20, zoom=11):
+    """
+    Display an animated interactive map of destination demand over time,
+    with marker size proportional to aggregated demand for each time interval.
+
+    Parameters
+    ----------
+    csv_file : str or pathlib.Path
+        Path to the CSV file (sep=';') containing ORIGIN, DESTINATION, ID,
+    and DEPARTURE columns.
+    title : str
+        Title of the figure.
+    crs : str or pyproj.CRS
+        Coordinate reference system of the input geometries.
+    interval : str, optional
+        Time rounding frequency applied to DEPARTURE (e.g., "15min", "30min", "1H").
+        Default = "15min".
+    max_size : int or float, optional
+        Maximum marker size used for scaling demand (default = 20).
+    zoom : int, optional
+        Initial zoom level of the map (default = 11).
+
+    Returns
+    -------
+    None
+    """
+
     df = pd.read_csv(csv_file, sep=';')
 
     # Extraction et conversion du temps
@@ -788,9 +1274,23 @@ def display_destination_time_distribution(csv_file, title, crs, interval="15min"
 
 def display_boxplot_departure(csv_file, title):
     """
+    Display a boxplot of departure times based on the DEPARTURE column.
 
+    Departure times are converted into minutes since midnight and displayed
+    with a formatted HH:MM y-axis.
 
+    Parameters
+    ----------
+    csv_file : str or pathlib.Path
+        Path to the CSV file (sep=';') containing a DEPARTURE column.
+    title : str
+        Title of the plot. Must be a non-empty string.
+
+    Returns
+    -------
+    None
     """
+
 
     if not title or title.strip() == "":
         logger.error("Invalid or null title.")
@@ -825,13 +1325,6 @@ def display_boxplot_departure(csv_file, title):
 
 # outputs
 
-import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-import numpy as np
-from pathlib import Path
-import logging
-
 logger = logging.getLogger(__name__)
 
 def display_acc_speed_time_for_cars(outputs_dir):
@@ -843,6 +1336,10 @@ def display_acc_speed_time_for_cars(outputs_dir):
     ----------
     outputs_dir : str
         relative path to a given simulation outputs.
+
+    Returns
+    -------
+    None
     """
     
     # Charger le fichier de flux
@@ -908,6 +1405,10 @@ def display_cost_length_time(outputs_dir):
     ----------
     outputs_dir : str
         relative path to a given simulation outputs.
+
+    Returns
+    -------
+    None
     """
 
      # Charger le fichier de flux
@@ -977,6 +1478,10 @@ def display_costs_time(outputs_dir):
     ----------
     outputs_dir : str
         relative path to a given simulation outputs.
+
+    Returns
+    -------
+    None
     """
 
 
@@ -1082,6 +1587,10 @@ def display_acc_spatiotemporal(outputs_dir, title, interval="10min"):
         relative path to a given simulation outputs.
     interval : str
         time interval between each frame.
+
+    Returns
+    -------
+    None
     """
 
     if not title or title.strip() == "":
@@ -1205,6 +1714,10 @@ def display_density_spatiotemporal(outputs_dir, title, interval="10min", max_opa
         relative path to a given simulation outputs.
     interval : str
         time interval between each frame.
+
+    Returns
+    -------
+    None
     """
 
     if not title or title.strip() == "":
@@ -1345,6 +1858,10 @@ def display_acc_spatiotemporal_with_veh(outputs_dir, title, interval="10min"):
         relative path to a given simulation outputs.
     interval : str
         time interval between each frame.
+
+    Returns
+    -------
+    None
     """
 
     if not title or title.strip() == "":
@@ -1358,7 +1875,8 @@ def display_acc_spatiotemporal_with_veh(outputs_dir, title, interval="10min"):
         logger.error("No veh.csv file for the given directory.")
         raise ValueError("No veh.csv file for the given directory.")
     
-    veh_data = pd.read_csv(veh_file[0], sep=';')
+    veh_data = pd.read_csv(veh_file[0], sep=';', on_bad_lines='skip',
+    engine='python')
 
     # Conversion du temps en format datetime
     veh_data =  process_departure(veh_data, "TIME")
@@ -1470,6 +1988,10 @@ def display_car_speed_distance_time(directory="", title="", interval="10min"):
         Title of the figure.
     interval : str
         Time interval for aggregation.
+
+    Returns
+    -------
+    None
     """
 
     # check
@@ -1545,14 +2067,6 @@ def display_car_speed_distance_time(directory="", title="", interval="10min"):
     plt.tight_layout()
     plt.show()
 
-    
-
-
-
-    
-
-
-
 
 def display_demand_variation(path="",title="",labels=[],cols=0):
     """
@@ -1568,6 +2082,10 @@ def display_demand_variation(path="",title="",labels=[],cols=0):
         subtitle of each barplot.
     cols : int, optional
         number of barplot per line.
+
+    Returns
+    -------
+    None
     """
     if not path or str(path).strip() == "": 
         logger.error("Invalid or null path.")
@@ -1654,6 +2172,10 @@ def display_demand_variation_auto(path="", cols=0):
         Path to the folder containing CSV variations.
     cols : int, optional
         Number of subplots per row (default auto).
+
+    Returns
+    -------
+    None
     """
     if not path or str(path).strip() == "": 
         raise ValueError("Invalid or null path.") 
@@ -1754,6 +2276,10 @@ def display_naive_sensitivity(title="", df=[], TARGET=""):
         The dataframe to display.
     TARGET : string
         The target variable to display, the weight of the diagram. The values must be positive.
+
+    Returns
+    -------
+    None
     """
 
     #check
@@ -1837,56 +2363,39 @@ def display_naive_sensitivity(title="", df=[], TARGET=""):
         
 
 
-
-
-
-
-
-
-
-
-# brouillons
-
-
-
-
-
-
-
-
-import pandas as pd
-import geopandas as gpd
-import numpy as np
-import math, re
-from pathlib import Path
-from shapely.geometry import Point
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import plotly.io as pio
-import matplotlib.pyplot as plt
-from matplotlib.colors import to_hex
-
-
 def display_spatiotemporal_maps(
     path, title, labels, cols, interval="10min", crs="EPSG:4326", size_scale=50
 ):
     """
-    Affiche un tableau interactif de cartes spatio-temporelles animées.
-    Chaque sous-carte représente un scénario (dossier) différent,
-    et les points indiquent les positions agrégées dans le temps.
+    Display a grid of interactive spatiotemporal maps with animated markers.
 
-    Les tailles sont proportionnelles au nombre d'occurrences (ID),
-    avec contour noir pour la lisibilité.
+    Each subplot corresponds to a different scenario (folder containing `veh.csv`),
+    and points indicate aggregated positions over time. Marker size is proportional
+    to the number of occurrences (ID), optionally scaled by `size_scale`.
 
-    Arguments :
-    - path : dossier contenant les sous-dossiers avec veh.csv
-    - title : titre global de la figure
-    - labels : titres des sous-cartes
-    - cols : nombre de colonnes dans la grille
-    - interval : intervalle de regroupement temporel (ex: '10min')
-    - crs : système de coordonnées initial (ex: 'EPSG:4326')
-    - size_scale : facteur d'échelle pour la taille des points
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        Folder containing subfolders with `veh.csv`.
+    title : str
+        Overall figure title.
+    labels : list of str
+        Titles for each subplot, must match the number of subfolders.
+    cols : int
+        Number of columns in the subplot grid.
+    interval : str, optional
+        Time rounding frequency (e.g., "10min"). Default = "10min".
+    crs : str, optional
+        CRS of input coordinates (default "EPSG:4326").
+    size_scale : int or float, optional
+        Scaling factor for point sizes (default = 50).
+
+    Returns
+    -------
+    None
+    The figure is saved as an interactive HTML file and opened automatically.
     """
+
 
     path = Path(path)
     if not path.exists():
@@ -2063,22 +2572,38 @@ def display_spatiotemporal_maps(
     fig.show()
 
 
-    
+
 
 def display_spatiotemporal_maps_color(path, title, labels, cols, interval="10min", crs="EPSG:4326", cmap_name="viridis"):
     """
-    Affiche un tableau interactif de cartes spatio-temporelles
-    où la couleur des points représente le nombre d'occurrences (ID).
+    Display a grid of interactive spatiotemporal maps where marker color represents
+    the number of occurrences (ID) at each position and time.
 
-    Arguments :
-    - path : dossier contenant les sous-dossiers avec veh.csv
-    - title : titre global de la figure
-    - labels : titres des sous-cartes
-    - cols : nombre de colonnes dans la grille
-    - interval : intervalle de regroupement temporel (ex: '10min')
-    - crs : système de coordonnées initial
-    - cmap_name : nom de la palette matplotlib (ex: 'viridis', 'plasma', 'inferno')
+    Each subplot corresponds to a different scenario (folder with `veh.csv`).
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        Folder containing subfolders with `veh.csv`.
+    title : str
+        Overall figure title.
+    labels : list of str
+        Titles for each subplot, must match the number of subfolders.
+    cols : int
+        Number of columns in the subplot grid.
+    interval : str, optional
+        Time rounding frequency (default = "10min").
+    crs : str, optional
+        CRS of input coordinates (default = "EPSG:4326").
+    cmap_name : str, optional
+        Matplotlib colormap name for coloring points by count (default = "viridis").
+
+    Returns
+    -------
+    None
+    The figure is saved as an interactive HTML file and opened automatically.
     """
+
     path = Path(path)
     if not path.exists():
         raise ValueError("Path invalide ou inexistant.")
@@ -2208,13 +2733,26 @@ def display_spatiotemporal_maps_color(path, title, labels, cols, interval="10min
     fig.show()
 
 
-
-
 def speed_analysis_proto(outputs=[]):
     """
+    Perform a comparative speed analysis for multiple simulation outputs.
 
+    For each scenario (folder containing `veh.csv`), computes:
+    - Mean vehicle speed (SPEED_MEAN, km/h)
+    - Distance-based speed (DISTANCE_DIFF, km/h)
+    over time, then plots both as line charts.
 
+    Parameters
+    ----------
+    outputs : list of str or pathlib.Path
+        List of folders containing `veh.csv` for different scenarios.
+
+    Returns
+    -------
+    None
+    Plots two side-by-side line charts comparing speed metrics across scenarios.
     """
+
     # check
     if len(outputs) == 0 : 
         logger.info("Null outputs.")

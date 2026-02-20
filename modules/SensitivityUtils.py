@@ -55,6 +55,10 @@ def plot_target_vs_total_ratio(df, target):
         Dataframe with target and TOTAL_RATIO columns.
     target : str
         Target variable.
+
+    Returns
+    -------
+    None
     """
 
     # checks
@@ -103,6 +107,10 @@ def plot_target_vs_ratio_by_cluster(df, target):
         Dataframe with TARGET_RATIO, TARGET_CLUSTER and target columns.
     target : str
         Target variable.
+
+    Returns
+    -------
+    None
     """
 
     # checks

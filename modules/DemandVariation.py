@@ -1,3 +1,5 @@
+
+
 # dependencies
 
 import os
@@ -12,6 +14,8 @@ import pandas as pd
 
 from scipy.stats import norm
 from scipy.stats import poisson
+from scipy.stats import truncnorm
+from scipy.stats import beta
 
 import logging
 
@@ -89,8 +93,6 @@ def restore_time_variable(df, column="DEPARTURE"):
 
     return df
 
-
-
 def list_of_lists_to_string(list_of_lists):
     """
     Converts a list of lists into a single string.
@@ -122,10 +124,6 @@ def list_of_lists_to_string(list_of_lists):
     
     # join all sections with '_'
     return "_".join(sections)
-
-
-
-    
 
 class DemandVariation():
     """
@@ -166,6 +164,10 @@ class DemandVariation():
         ----------
         original_demand_path : str
             Relative path to the original demand file.
+            
+        Returns
+        -------
+        None
         """
 
         # check
@@ -199,6 +201,10 @@ class DemandVariation():
         ----------
         new_original_demand_path : str
             Relative path to the new original demand file.
+
+        Returns
+        ------
+        None
         """
 
         # check
@@ -236,8 +242,9 @@ class DemandVariation():
             Variation parameters with format [target quantity or ratio, type, law, law paramaters, random state] (default = [1, "WeightedSampling", "Uniform", None, 42]).
         target_df : pandas.DataFrame
             Dataframe to modify.
-        Return
-        ------
+            
+        Returns
+        -------
         pandas.DataFrame
             Modified dataframe.
         """
@@ -268,8 +275,9 @@ class DemandVariation():
             Variation parameters with format [target ratio, type, law, law paramaters, random state] (default = [1, "WeightedSampling", "Uniform", None, 42]).
         target_df : pandas.DataFrame
             Dataframe to modify.
-        Return
-        ------
+            
+        Returns
+        -------
         pandas.DataFrame
             Modified dataframe.
         """
@@ -300,8 +308,9 @@ class DemandVariation():
             Variation parameters with format [target quantity, type, law, law paramaters, random state] (default = [1, "WeightedSampling", "Uniform", None, 42]).
         target_df : pandas.DataFrame
             Dataframe to modify.
-        Return
-        ------
+            
+        Returns
+        -------
         pandas.DataFrame
             Modified dataframe.
         """
@@ -374,8 +383,9 @@ class DemandVariation():
             Random state.
         target_df : pandas.DataFrame
             Dataframe to modify.
-        Return
-        ------
+            
+        Returns
+        -------
         pandas.DataFrame
         """    
         
@@ -410,8 +420,9 @@ class DemandVariation():
             Random state.
         target_df : pandas.DataFrame
             Dataframe to modify.
-        Return
-        ------
+            
+        Returns
+        -------
         pandas.DataFrame
         """  
         
@@ -445,8 +456,9 @@ class DemandVariation():
             Random state.
         target_df : pandas.DataFrame
             Dataframe to modify.
-        Return
-        ------
+            
+        Returns
+        -------
         pandas.DataFrame
         """  
         
@@ -466,8 +478,6 @@ class DemandVariation():
 
 
     # level 4
-
-
 
     def apply_ratio_weightedsampling_uniform_variation(self, target_ratio, parameters, random_state, target_df):
         """
@@ -826,8 +836,7 @@ class DemandVariation():
         variation_df["ID"] = list(range(len(variation_df)))
         variations_df = restore_time_variable(variation_df, "DEPARTURE")
         return variation_df.copy()
-
-        
+     
     def apply_quantity_weightedsampling_normal_variation(self, delta_quantity, parameters, random_state, target_df):
         """
         Apply a quantity-based variation using a time-based Normal distribution
@@ -944,7 +953,6 @@ class DemandVariation():
         variation_df["ID"] = list(range(len(variation_df)))
         variations_df = restore_time_variable(variation_df, "DEPARTURE")
         return variation_df.copy()
-
 
     def apply_ratio_density_uniform_variation(self, target_ratio, parameters, random_state, target_df):
         """
@@ -1128,8 +1136,6 @@ class DemandVariation():
         variations_df = restore_time_variable(variation_df, "DEPARTURE")
         return variation_df.copy()
 
-
-
     def apply_quantity_density_uniform_variation(self, delta_quantity, parameters, random_state, target_df):
         """
         Apply a quantity-based variation using uniform density on DEPARTURE times.
@@ -1207,7 +1213,6 @@ class DemandVariation():
         variation_df["ID"] = list(range(len(variation_df)))
         variations_df = restore_time_variable(variation_df, "DEPARTURE")
         return variation_df.copy()
-
 
     def apply_quantity_density_normal_variation(self, delta_quantity, parameters, random_state, target_df):
         """
@@ -1291,8 +1296,6 @@ class DemandVariation():
         return variation_df.copy()
 
 
-        
-
     # Total headcount variations
 
     def apply_total_ratio_variation(self, origin="Unknown", method="WeightedSampling", law="Uniform", parameters=None, interval=[1,1,0.1], number_per_ratio=1, random_state=42, path="", car_only=False):
@@ -1319,6 +1322,10 @@ class DemandVariation():
             Path to the source dataframe (default = "").
         car_only : bool, optional
             (default = False).
+
+        Returns
+        -------
+        None
         """
 
         # check
@@ -1384,7 +1391,6 @@ class DemandVariation():
  
         logger.info(f"{variation_counter} total ratio variations, method : {method}, law : {law}, parameters : {parameters}, interval : {interval}, number_per_ratio : {number_per_ratio}, random_state : {random_state}, saved at path : {path}.")
 
-
     def apply_total_quantity_variation(self, origin="Unknown", method="WeightedSampling", law="Uniform", parameters=None, interval=[0,0,0.1], number_per_quantity=1, random_state=42, path="", car_only=False):
         """
         Creates total ratio variations.
@@ -1409,6 +1415,10 @@ class DemandVariation():
             Path to the source dataframe (default = "").
         car_only : bool, optional
             (default = False).
+
+        Returns
+        -------
+        None
         """
 
         # check
@@ -1475,7 +1485,6 @@ class DemandVariation():
  
         logger.info(f"{variation_counter} total quantity variations, method : {method}, law : {law}, parameters : {parameters}, interval : {interval}, number_per_quantity : {number_per_quantity}, random_state : {random_state}, saved at path : {path}.")
 
-
     def apply_classification_ratio_variation(
             self,
             origin="Unknown",
@@ -1491,17 +1500,36 @@ class DemandVariation():
             car_only=False
         ):
         """
-        Creates classification ratio variations on selected clusters.
-    
-        DIFFERENCE WITH PREVIOUS VERSION :
-        ---------------------------------
-        The target cluster is modified with its own ratio.
-        All OTHER clusters are treated AS ONE SINGLE BLOCK:
-            - A single compensatory ratio is applied to the union of all other clusters,
-              instead of cluster-by-cluster compensation.
-    
-        The final file contains:
-            - CLUSTER_RATIO: true final multiplicative ratio per cluster.
+        Creates classification ratio variations on selected clusters. For each ratio value and cluster in clusters, a variation is produced and            saved at path. The subset of individuals associated with the target cluster is tranformed to have it count equal to its original count             time the target cluster, the remaining subset is then reshaped to target a global count equal to original global count time total_ratio.
+
+        Parameters
+        ----------
+        origin : str
+            label for the original demand.
+        method : str
+            Method used to produce variations.
+        lax : str
+            Theorical distribution used by the method.
+        parameters : list
+            Parameters of the given law.
+        total_ratio : float
+            Total ratio targeted.
+        clusters : list
+            Clusters targeted.
+        interval : list
+            Interval for the ratio values. pattern : np.arange(interval[0], interval[1] + interval[2] / 10, interval[2]).
+        number_per_ratio : int
+            Number of variations produced by cluster ratio couple.
+        random_state : int
+            Random state.
+        path : str
+            path to save the variations.
+        car_only : bool
+            If true, change only lines with Car or Personal Car as obility services (doesn't work).
+
+        Returns
+        -------
+        None
         """
 
         # ------------------------
@@ -1649,7 +1677,6 @@ class DemandVariation():
             f"{variation_counter} total variations created and saved in {path}"
         )
 
-
     def apply_classification_quantity_variation(
             self,
             origin="Unknown",
@@ -1665,14 +1692,7 @@ class DemandVariation():
             car_only=False
         ):
         """
-        Creates classification quantity variations on selected clusters.
-
-        Quantity semantics:
-        -------------------
-        - target_quantity is an ABSOLUTE delta (integer, positive or negative)
-        - final_target_size = original_target_size + target_quantity
-        - all other clusters are treated as ONE SINGLE BLOCK
-        - total_ratio controls the final total demand size
+        Same as the ratio one but with quantity as parameters.
         """
 
         # ------------------------
@@ -1843,7 +1863,863 @@ class DemandVariation():
         )
 
 
+
+
+
+    def apply_uniform_distribution_quantile(self, target_df=pd.DataFrame()):
+        """
+        Transform target_df temporal distribution to a Uniform distribution
+        using quantiles (deterministic, order-preserving).
         
+        Parameters
+        ----------
+        target_df : pandas.DataFrame()
+            dataframe to transform.
+
+        Returns
+        -------
+        df : pandas.DataFrame
+            transformed dataframe.
+        """
+        if target_df.empty:
+            raise ValueError("Null dataframe.")
+        if "DEPARTURE" not in target_df.columns:
+            raise ValueError("DEPARTURE column not found.")
+
+        df = target_df.copy()
+        df = process_time_variable(df, "DEPARTURE")
+
+        # Sort to preserve temporal order
+        df = df.sort_values(by="DEPARTURE").reset_index(drop=True)
+
+        times = df["DEPARTURE"]
+        t_min = times.min()
+        t_max = times.max()
+
+        total_seconds = (t_max - t_min).total_seconds()
+        if total_seconds <= 0:
+            raise ValueError("Invalid temporal interval.")
+
+        n = len(df)
+
+        # Deterministic quantiles
+        quantiles = (np.arange(n) + 0.5) / n
+
+        # Uniform inverse CDF
+        new_seconds = quantiles * total_seconds
+
+        df["DEPARTURE"] = [
+            t_min + pd.to_timedelta(s, unit="s") for s in new_seconds
+        ]
+
+        df = restore_time_variable(df, "DEPARTURE")
+        return df
+
+    def apply_uniform_distributions(self,demand_path="", directory=""):
+        """
+        Transform the demand_path dataframe temporal distribution to a Uniform distribution
+        using quantiles (deterministic, order-preserving) and saves at directory.
+
+        Parameters
+        ----------
+        demand_path : str
+            Path to the dataframe.
+        directory : str
+            Path to save the transformed dataframe.
+
+        Returns
+        -------
+        None
+        """
+        # check
+        if not demand_path or demand_path.strip()=="":
+            logger.info("Invalid demand path.")
+            raise ValueError("Invalid demand path.")
+        if not directory or directory.strip()=="":
+            logger.info("Invalid directory.")
+            raise ValueError("Invalid directory.")
+
+        demand = pd.read_csv(demand_path, sep=';')
+        
+        os.makedirs(directory, exist_ok=True)
+
+        logger.info(f"uniform variation.")
+        buffer = demand.copy()
+        var = self.apply_uniform_distribution_quantile(target_df=buffer)
+        file_name = f"Temporal __Uniform.csv"
+        full_path = f"{directory}/{file_name}"
+        var.to_csv(full_path, sep=';', index=False)
+
+        logger.info(f"Uniform variationsproduced and savec at directory : {directory}.")
+
+
+
+    def apply_uniform_distribution(self, target_df=pd.DataFrame()):
+        """
+        Transforms target_df temporal distribution to be uniform
+        without changing the total number of rows.
+        The transformation is applied on the DEPARTURE column only.
+        
+        Parameters
+        ----------
+        target_df : pandas.DataFrame()
+            dataframe to transform.
+
+        Returns
+        -------
+        df : pandas.DataFrame
+            transformed dataframe.
+        """
+
+        # check
+        if target_df.empty:
+            logger.info("Null dataframe.")
+            raise ValueError("Null dataframe.")
+
+        if "DEPARTURE" not in target_df.columns:
+            raise ValueError("DEPARTURE column not found.")
+
+        df = target_df.copy()
+
+        # Ensure DEPARTURE is datetime
+        df = process_time_variable(df, "DEPARTURE")
+
+        # Convert times to seconds since start of interval
+        times = df["DEPARTURE"]
+
+        t_min = times.min()
+        t_max = times.max()
+
+        total_seconds = (t_max - t_min).total_seconds()
+        if total_seconds <= 0:
+            raise ValueError("Invalid temporal interval.")
+
+        seconds = (times - t_min).dt.total_seconds().to_numpy()
+
+        # Empirical ranks → uniform distribution in [0, 1]
+        ranks = pd.Series(seconds).rank(method="average")
+        u = (ranks - 0.5) / len(seconds)
+
+        # Map uniform quantiles to uniform time interval
+        new_seconds = u * total_seconds
+
+        # Convert back to datetime
+        df["DEPARTURE"] = [
+            t_min + pd.to_timedelta(s, unit="s") for s in new_seconds
+        ]
+
+        # Restore original string format
+        df = restore_time_variable(df, "DEPARTURE")
+
+        return df
+
+
+    def apply_normal_distribution(self, parameters=[],target_df=pd.DataFrame()):
+        """
+        Transforms target_df temporal distribution to be normal
+        without changing the total number of rows.
+
+        Parameters
+        ----------
+        parameters : list
+            [mean, std]
+            mean     : float in [0, 1], relative position in the time interval
+            std : float, std in seconds
+        target_df : pandas.DataFrame
+            dataframe to transform.
+
+        Returns
+        -------
+        df : pandas.DataFrame
+            transformed dataframe.
+        """
+
+        # check
+        if target_df.empty:
+            logger.info("Null dataframe.")
+            raise ValueError("Null dataframe.")
+
+        if "DEPARTURE" not in target_df.columns:
+            raise ValueError("DEPARTURE column not found.")
+
+        if not isinstance(parameters, list) or len(parameters) != 2:
+            raise ValueError("parameters must be [mean, std].")
+
+        mean_rel = float(parameters[0])
+        std_sec = float(parameters[1])
+
+        if not (0.0 <= mean_rel <= 1.0):
+            raise ValueError("mean must be in [0, 1].")
+
+        if std_sec <= 0:
+            raise ValueError("std must be > 0 (in seconds).")
+
+        #std_sec = np.sqrt(variance_sec)
+
+        df = target_df.copy()
+
+        # Ensure DEPARTURE is datetime
+        df = process_time_variable(df, "DEPARTURE")
+
+        times = df["DEPARTURE"]
+
+        # Define time interval
+        t_min = times.min()
+        t_max = times.max()
+        total_seconds = (t_max - t_min).total_seconds()
+
+        if total_seconds <= 0:
+            raise ValueError("Invalid temporal interval.")
+
+        # Convert to seconds since interval start
+        seconds = (times - t_min).dt.total_seconds().to_numpy()
+
+        # Empirical CDF (quantiles)
+        ranks = pd.Series(seconds).rank(method="average")
+        u = (ranks - 0.5) / len(seconds)
+
+        # Target normal parameters (absolute seconds)
+        mean_sec = mean_rel * total_seconds
+
+        # Quantile mapping to target normal distribution
+        new_seconds = norm.ppf(u, loc=mean_sec, scale=std_sec)
+
+        # Clip to valid interval
+        new_seconds = np.clip(new_seconds, 0, total_seconds)
+
+        # Convert back to datetime
+        df["DEPARTURE"] = [
+            t_min + pd.to_timedelta(s, unit="s") for s in new_seconds
+        ]
+
+        # Restore original string format
+        df = restore_time_variable(df, "DEPARTURE")
+
+        return df
+
+    
+
+    def apply_normal_distribution2(self, parameters=[], target_df=pd.DataFrame()):
+        """
+        Transform target_df temporal distribution to a Normal (Gaussian) law
+        restricted to the interval [t_min, t_max] without changing the number of rows.
+
+        Parameters
+        ----------
+        parameters : list
+            [mean, std]
+            mean     : float in [0, 1], relative position in the time interval
+            std : float, std in seconds
+        target_df : pandas.DataFrame
+            dataframe to transform.
+
+        Returns
+        -------
+        df : pandas.DataFrame
+            transformed dataframe.
+        """
+        if target_df.empty:
+            raise ValueError("Null dataframe.")
+        if "DEPARTURE" not in target_df.columns:
+            raise ValueError("DEPARTURE column not found.")
+        if not isinstance(parameters, list) or len(parameters) != 2:
+            raise ValueError("parameters must be [mean, std].")
+
+        mean_rel = float(parameters[0])
+        std_sec = float(parameters[1])
+
+        if not (0.0 <= mean_rel <= 1.0):
+            raise ValueError("mean must be in [0, 1].")
+        if std_sec <= 0:
+            raise ValueError("std must be > 0 (in seconds).")
+
+        df = target_df.copy()
+        df = process_time_variable(df, "DEPARTURE")
+        times = df["DEPARTURE"]
+
+        t_min = times.min()
+        t_max = times.max()
+        total_seconds = (t_max - t_min).total_seconds()
+        if total_seconds <= 0:
+            raise ValueError("Invalid temporal interval.")
+
+        n = len(df)
+        mean_sec = mean_rel * total_seconds
+
+        # Truncated normal bounds in std units
+        a, b = (0 - mean_sec) / std_sec, (total_seconds - mean_sec) / std_sec
+
+        # Sample truncated normal
+        new_seconds = truncnorm.rvs(a, b, loc=mean_sec, scale=std_sec, size=n)
+
+        # Convert back to datetime
+        df["DEPARTURE"] = [t_min + pd.to_timedelta(s, unit="s") for s in new_seconds]
+
+        df = df.sort_values(by="DEPARTURE", ascending=True)
+
+        # Restore original string format
+        df = restore_time_variable(df, "DEPARTURE")
+        return df
+
+
+
+
+
+    def apply_normal_distribution_quantile(self, parameters=[], target_df=pd.DataFrame()):
+        """
+        Transform target_df temporal distribution to a truncated Normal (Gaussian)
+        using quantiles (deterministic, order-preserving).
+
+        Parameters
+        ----------
+        parameters : list
+            [mean, std]
+            mean     : float in [0, 1], relative position in the time interval
+            std : float, std in seconds
+        target_df : pandas.DataFrame
+            dataframe to transform.
+
+        Returns
+        -------
+        df : pandas.DataFrame
+            transformed dataframe.
+        """
+
+        from scipy.stats import truncnorm
+        import pandas as pd
+        import numpy as np
+    
+        if target_df.empty:
+            raise ValueError("Null dataframe.")
+        if "DEPARTURE" not in target_df.columns:
+            raise ValueError("DEPARTURE column not found.")
+        if not isinstance(parameters, list) or len(parameters) != 2:
+            raise ValueError("parameters must be [mean, std].")
+
+        mean_rel = float(parameters[0])
+        std_sec = float(parameters[1])
+
+        if not (0.0 <= mean_rel <= 1.0):
+            raise ValueError("mean must be in [0, 1].")
+        if std_sec <= 0:
+            raise ValueError("std must be > 0 (in seconds).")
+
+        df = target_df.copy()
+        df = process_time_variable(df, "DEPARTURE")
+
+        # Sort to preserve temporal order
+        df = df.sort_values(by="DEPARTURE").reset_index(drop=True)
+
+        times = df["DEPARTURE"]
+        t_min = times.min()
+        t_max = times.max()
+
+        total_seconds = (t_max - t_min).total_seconds()
+        if total_seconds <= 0:
+            raise ValueError("Invalid temporal interval.")
+
+        n = len(df)
+        mean_sec = mean_rel * total_seconds
+
+        # Truncated normal bounds (in std units)
+        a = (0 - mean_sec) / std_sec
+        b = (total_seconds - mean_sec) / std_sec
+
+        # Deterministic quantiles
+        quantiles = (np.arange(n) + 0.5) / n
+
+        # Inverse CDF (ppf)
+        new_seconds = truncnorm.ppf(
+            quantiles,
+            a, b,
+            loc=mean_sec,
+            scale=std_sec
+        )
+
+        df["DEPARTURE"] = [
+            t_min + pd.to_timedelta(s, unit="s") for s in new_seconds
+        ]
+
+        df = restore_time_variable(df, "DEPARTURE")
+        return df
+
+
+    def apply_normal_distributions(self, mean_interval=[], std_interval=[], demand_path="", directory=""):
+        """
+        Produce normal variations from demand_path demand with parameters in mean_interval et std_interval. The variations are saved at                    directory.
+
+        Parameters
+        ----------
+        mean_interval : list
+            Parameters to create a range of mean values. pattern : np.arange(mean_interval[0], mean_interval[1], mean_interval[2]).
+        std_interval : list
+            Parameters to create a range of std values. pattern : np.arange(std_interval[0], std_interval[1], std_interval[2]).
+        demand_path : str
+            Path the target dataframe.
+        directory : str
+            Path to save the variations.
+
+        Returns
+        -------
+        None
+        """
+        # check
+        if len(mean_interval)!=3:
+            logger.info("Invalid mean parameters.")
+            raise ValueError("Invalid mean parameters.")
+        if len(std_interval)!=3:
+            logger.info("Invalid std parameters.")
+            raise ValueError("Invalid std parameters.")
+        if not demand_path or demand_path.strip()=="":
+            logger.info("Invalid demand path.")
+            raise ValueError("Invalid demand path.")
+        if not directory or directory.strip()=="":
+            logger.info("Invalid directory.")
+            raise ValueError("Invalid directory.")
+
+
+        mean_range = np.arange(mean_interval[0], mean_interval[1], mean_interval[2])
+        std_range = np.arange(std_interval[0], std_interval[1], std_interval[2])
+
+        demand = pd.read_csv(demand_path, sep=';')
+        
+        os.makedirs(directory, exist_ok=True)
+
+        for mean in mean_range : 
+            for std in std_range : 
+                logger.info(f"normal variation, mean : {mean}, std : {std}.")
+                buffer = demand.copy()
+                var = self.apply_normal_distribution2(parameters=[mean, std], target_df=buffer)
+                file_name = f"Temporal __Normal__{mean:.2f}_{std:.2f}.csv"
+                full_path = f"{directory}/{file_name}"
+                var.to_csv(full_path, sep=';', index=False)
+
+        logger.info(f"variations produced with mean_interval : {mean_interval}, std_interval : {std_interval} and directory : {directory}.")
+                
+                
+
+
+
+    def apply_beta_distribution_ab(self, parameters=[], target_df=pd.DataFrame(),
+                               fond_=0.0005):
+        """
+        Transform the temporal distribution of target_df according to a Beta distribution,
+        with a constant minimal baseline before and after the peak, while preserving the order of individuals.
+
+        Parameters
+        ----------
+        parameters : list
+            [alpha, beta]
+            alpha : float
+            beta : float
+        target : pandas.DataFrame
+            dataframe to transform.
+        fond_ : float
+            constant minimal baseline.
+
+        Returns
+        -------
+        df : pandas.DataFrame
+            transformed dataframe.
+        """
+        import numpy as np
+        from scipy.stats import beta
+
+        if target_df.empty:
+            raise ValueError("Null dataframe.")
+        if "DEPARTURE" not in target_df.columns:
+            raise ValueError("DEPARTURE column not found.")
+        if not isinstance(parameters, list) or len(parameters) != 2:
+            raise ValueError("parameters must be [alpha, beta].")
+
+        alpha, beta_param = parameters
+        if alpha <= 0 or beta_param <= 0:
+            raise ValueError("alpha and beta must be > 0.")
+
+        df = target_df.copy()
+        df = process_time_variable(df, "DEPARTURE")
+        times = df["DEPARTURE"]
+
+        t_min = times.min()
+        t_max = times.max()
+        total_seconds = (t_max - t_min).total_seconds()
+        if total_seconds <= 0:
+            raise ValueError("Invalid temporal interval.")
+
+        n = len(df)
+
+        # Tirage dense pour construire la densité combinée
+        x_grid = np.linspace(0, 1, 1000)
+
+        # Calcul du mode si alpha>1 et beta>1
+        mode = (alpha - 1) / (alpha + beta_param - 2) if alpha > 1 and beta_param > 1 else 0.5
+
+        # Densité Beta
+        beta_density = beta.pdf(x_grid, alpha, beta_param)
+        beta_density /= beta_density.sum()  # normalisation
+
+        # Fond minimal avant et après le pic
+        fond = np.where(x_grid < mode, fond_, fond_)
+
+        # Combinaison Beta + fond
+        combined_density = beta_density + fond
+        combined_density /= combined_density.sum()  # normalisation totale
+
+        # Calcul CDF pour mapping des quantiles
+        cdf = np.cumsum(combined_density)
+        cdf /= cdf[-1]
+
+        # Conserver l'ordre : map les quantiles uniformes selon l'ordre original
+        quantiles = np.linspace(0, 1, n)
+        x_samples_ordered = np.interp(quantiles, cdf, x_grid)
+
+        # Conversion en secondes
+        new_seconds = x_samples_ordered * total_seconds
+        df["DEPARTURE"] = [t_min + pd.to_timedelta(s, unit="s") for s in new_seconds]
+
+        df = df.sort_values(by="DEPARTURE", ascending=True)
+
+
+        # Restaurer format original
+        df = restore_time_variable(df, "DEPARTURE")
+        return df
+
+
+
+    def apply_beta_distribution_mc(self, parameters=[], target_df=pd.DataFrame()):
+        """
+        Transform target_df temporal distribution to a Beta law using
+        mean / concentration parametrization.
+
+        Parameters
+        ----------
+        parameters : list
+            parameters = [mean_rel, concentration]
+            mean_rel : float
+            concentration : float
+        target : pandas.DataFrame
+             dataframe to transform.
+        Returns
+        -------
+        df : pandas.DataFrame
+            transformed dataframe.
+        """
+
+        if target_df.empty:
+            raise ValueError("Null dataframe.")
+        if "DEPARTURE" not in target_df.columns:
+            raise ValueError("DEPARTURE column not found.")
+        if not isinstance(parameters, list) or len(parameters) != 2:
+            raise ValueError("parameters must be [mean_rel, concentration].")
+
+        mean_rel = float(parameters[0])
+        concentration = float(parameters[1])
+
+        if not (0.0 < mean_rel < 1.0):
+            raise ValueError("mean_rel must be in (0, 1).")
+        if concentration <= 0:
+            raise ValueError("concentration must be > 0.")
+
+        # Convert to alpha / beta
+        alpha = mean_rel * concentration
+        beta_param = (1.0 - mean_rel) * concentration
+
+        return self.apply_beta_distribution_ab(
+            parameters=[alpha, beta_param],
+            target_df=target_df
+        )
+
+    def apply_beta_distributions_ab(self, alpha_interval=[], beta_interval=[],
+                                demand_path="", directory="",
+                                fond=0.0005):
+        """
+        Produce beta variations from demand_path dataframe with alpha beta parameters value in alpha_interval and beta interval and
+        with a constant minimal baseline before and after the peak, while preserving the order of individuals. The variations are saved at                 directory.
+
+        Parameters
+        ----------
+        alpha_interval : list
+            Parameters for alpha range. pattern : np.arange(alpha_interval[0], alpha_interval[1], alpha_interval[2]).
+        beta_interval : list
+            Parameters for beta range. pattern : np.arange(beta_interval[0], beta_interval[1], beta_interval[2])
+        demand_path : str
+            Original dataframe path.
+        directory : str
+            Path to save variations
+        fond_ : float
+            constant minimal baseline.
+
+        Returns
+        -------
+        None
+        """
+        if len(alpha_interval) != 3 or len(beta_interval) != 3:
+            raise ValueError("Invalid alpha/beta intervals.")
+    
+        alpha_range = np.arange(alpha_interval[0], alpha_interval[1], alpha_interval[2])
+        beta_range = np.arange(beta_interval[0], beta_interval[1], beta_interval[2])
+
+        demand = pd.read_csv(demand_path, sep=';')
+        os.makedirs(directory, exist_ok=True)
+
+        for alpha in alpha_range:
+            for beta_param in beta_range:
+                logger.info(f"beta variation, alpha={alpha}, beta={beta_param}")
+                buffer = demand.copy()
+                var = self.apply_beta_distribution_ab(
+                    parameters=[alpha, beta_param],
+                    target_df=buffer,
+                    fond_=fond
+                )
+                file_name = f"Temporal__Beta__{alpha:.2f}_{beta_param:.2f}_{fond}.csv"
+                var.to_csv(f"{directory}/{file_name}", sep=';', index=False)
+
+
+    def apply_beta_distributions_mc(self, mean_interval=[], concentration_interval=[],
+                                demand_path="", directory="", name=""):
+        """
+        Produce beta variations from demand_path dataframe with mean concentratoon parameters value in mean_interval and concentration_interval and
+        with a constant minimal baseline before and after the peak, while preserving the order of individuals. The variations are saved at                 directory.
+
+        Parameters
+        ----------
+        mean_interval : list
+            Parameters for mean range. pattern : np.arange(mean_interval[0], mean_interval[1], mean_interval[2]).
+        concentration_interval : list
+            Parameters for concentration range. pattern : np.arange(
+                concentration_interval[0], concentration_interval[1], concentration_interval[2]
+        )
+        demand_path : str
+            Original dataframe path.
+        directory : str
+            Path to save variations
+        fond_ : float
+            constant minimal baseline.
+
+        Returns
+        -------
+        None
+        """
+
+        # Vérifications d'inputs
+        if len(mean_interval) != 3:
+            raise ValueError("Invalid mean_interval (must be [start, stop, step]).")
+        if len(concentration_interval) != 3:
+            raise ValueError("Invalid concentration_interval (must be [start, stop, step]).")
+        if not demand_path or not directory or not name:
+            raise ValueError("Invalid input paths or name.")
+
+        # Création des grilles
+        mean_range = np.arange(mean_interval[0], mean_interval[1], mean_interval[2])
+        concentration_range = np.arange(
+                concentration_interval[0], concentration_interval[1], concentration_interval[2]
+        )
+
+        # Lecture du fichier source
+        demand = pd.read_csv(demand_path, sep=';')
+        os.makedirs(directory, exist_ok=True)
+
+        # Boucle sur toutes les combinaisons
+        for mean_rel in mean_range:
+            for concentration in concentration_range:
+                logger.info(f"beta variation, mean_rel={mean_rel}, concentration={concentration}")
+                buffer = demand.copy()
+                var = self.apply_beta_distribution_mc(
+                    parameters=[mean_rel, concentration],
+                    target_df=buffer
+                )
+                # Nom du fichier
+                file_name = f"Temporal__Beta__mean{mean_rel:.2f}__conc{concentration:.2f}.csv"
+                var.to_csv(f"{directory}/{file_name}", sep=';')
+
+        logger.info(
+            f"Beta variations produced with mean_interval: {mean_interval}, "
+            f"concentration_interval: {concentration_interval}, directory: {directory}"
+        )
+
+
+
+
+
+
+
+
+
+        
+
+
+    from scipy.stats import beta
+
+    def apply_beta_distribution_ab2(
+        self,
+        parameters=[],
+        target_df=pd.DataFrame(),
+        fond_before=0.05,
+        fond_after=0.02
+    ):
+        """
+        Déforme la distribution temporelle selon une loi Beta PURE.
+        - Pas de cassure
+        - Ordre conservé
+        - Effectif total strictement conservé
+        - Les fonds n'influencent PAS la CDF
+        """
+
+        import numpy as np
+        import pandas as pd
+        from scipy.stats import beta
+
+        if target_df.empty:
+            raise ValueError("Null dataframe.")
+        if "DEPARTURE" not in target_df.columns:
+            raise ValueError("DEPARTURE column not found.")
+        if not isinstance(parameters, list) or len(parameters) != 2:
+            raise ValueError("parameters must be [alpha, beta].")
+
+        alpha, beta_param = parameters
+        if alpha <= 0 or beta_param <= 0:
+            raise ValueError("alpha and beta must be > 0.")
+
+        df = target_df.copy()
+        df = process_time_variable(df, "DEPARTURE")
+        times = df["DEPARTURE"]
+
+        t_min = times.min()
+        t_max = times.max()
+        total_seconds = (t_max - t_min).total_seconds()
+        if total_seconds <= 0:
+            raise ValueError("Invalid temporal interval.")
+
+        n = len(df)
+    
+        # Axe continu
+        x_grid = np.linspace(0, 1, 2000)
+
+        # Beta PURE
+        beta_density = beta.pdf(x_grid, alpha, beta_param)
+        beta_density /= beta_density.sum()
+
+        # CDF lisse
+        cdf = np.cumsum(beta_density)
+        cdf /= cdf[-1]
+
+        # Mapping des individus (effectif conservé)
+        quantiles = np.linspace(0, 1, n)
+        x_samples_ordered = np.interp(quantiles, cdf, x_grid)
+
+        # Conversion temporelle
+        new_seconds = x_samples_ordered * total_seconds
+        df["DEPARTURE"] = [t_min + pd.to_timedelta(s, unit="s") for s in new_seconds]
+
+        df = restore_time_variable(df, "DEPARTURE")
+        return df
+
+
+
+        
+    def apply_beta_distributions_ab2(self, alpha_interval=[], beta_interval=[],
+                                demand_path="", directory="", name="",
+                                fond_before=0.05, fond_after=0.02):
+
+        if len(alpha_interval) != 3 or len(beta_interval) != 3:
+            raise ValueError("Invalid alpha/beta intervals.")
+    
+        alpha_range = np.arange(alpha_interval[0], alpha_interval[1], alpha_interval[2])
+        beta_range = np.arange(beta_interval[0], beta_interval[1], beta_interval[2])
+
+        demand = pd.read_csv(demand_path, sep=';')
+        os.makedirs(directory, exist_ok=True)
+
+        for alpha in alpha_range:
+            for beta_param in beta_range:
+                logger.info(f"beta variation, alpha={alpha}, beta={beta_param}")
+                buffer = demand.copy()
+                var = self.apply_beta_distribution_ab2(
+                    parameters=[alpha, beta_param],
+                    target_df=buffer,
+                    fond_before=fond_before,
+                    fond_after=fond_after
+                )
+                file_name = f"Temporal__Beta__{alpha:.2f}_{beta_param:.2f}_{fond_before}_{fond_after}.csv"
+                var.to_csv(f"{directory}/{file_name}", sep=';', index=False)
+
+    def reshape_departures(self, df: pd.DataFrame, parameters: dict) -> pd.DataFrame:
+    
+        df_out = df.copy()
+        col = parameters["column"]
+    
+        # Sauvegarder index original
+        df_out["_original_index"] = df_out.index
+    
+        # Convertir horaire en secondes
+        df_out[col] = pd.to_timedelta(df_out[col]).dt.total_seconds()
+    
+        T0 = pd.to_timedelta(parameters["T0"]).total_seconds()
+        Td = pd.to_timedelta(parameters["Td"]).total_seconds()
+        Tf = pd.to_timedelta(parameters["Tf"]).total_seconds()
+        T1 = pd.to_timedelta(parameters["T1"]).total_seconds()
+    
+        p_before = parameters["p_before"]
+        p_after = parameters["p_after"]
+        alpha = parameters["alpha"]
+    
+        if p_before + p_after >= 1:
+            raise ValueError("p_before + p_after must be < 1")
+    
+        p_main = 1 - p_before - p_after
+    
+        # Trier pour conserver l'ordre relatif
+        df_out = df_out.sort_values(by=col)
+    
+        N = len(df_out)
+        u = np.linspace(0, 1, N)
+    
+        total_before = Td - T0
+        total_main = Tf - Td
+        total_after = T1 - Tf
+    
+        new_seconds = np.zeros(N)
+    
+        # Zones vectorisées
+        mask_before = u < p_before
+        mask_main = (u >= p_before) & (u <= p_before + p_main)
+        mask_after = u > p_before + p_main
+    
+        # Avant
+        if p_before > 0:
+            v = u[mask_before] / p_before
+            new_seconds[mask_before] = v * total_before
+    
+        # Principal
+        v = (u[mask_main] - p_before) / p_main
+        new_seconds[mask_main] = total_before + (v ** alpha) * total_main
+    
+        # Après
+        if p_after > 0:
+            v = (u[mask_after] - (p_before + p_main)) / p_after
+            new_seconds[mask_after] = total_before + total_main + v * total_after
+    
+        # Ajouter T0
+        final_seconds = T0 + new_seconds
+    
+        # Conversion en H:MM:SS
+        final_seconds = np.round(final_seconds).astype(int)
+        hours = final_seconds // 3600
+        minutes = (final_seconds % 3600) // 60
+        seconds = final_seconds % 60
+    
+        df_out[col] = [
+            f"{h:02d}:{m:02d}:{s:02d}"
+            for h, m, s in zip(hours, minutes, seconds)
+        ]
+    
+        # Remettre l'ordre original
+        df_out = df_out.sort_values("_original_index").drop(columns="_original_index")
+        
+        return df_out
+
+
+
 
 
     # getters
@@ -1862,5 +2738,12 @@ class DemandVariation():
 
     def get_laws(self):
         return self._laws
+
+
+
+
+
+
+
 
     

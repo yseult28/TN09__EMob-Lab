@@ -1,5 +1,8 @@
 
 # dependencies
+
+from pathlib import Path
+
 import json
 
 import numpy as np
@@ -17,6 +20,21 @@ import geopandas as gpd
 from shapely.geometry import Point
 import plotly.graph_objects as go
 
+from mnms.mobility_service.on_demand import OnDemandDepotMobilityService
+from mnms.io.graph import load_graph, load_odlayer, save_odlayer
+from mnms.travel_decision.logit import LogitDecisionModel, ModeCentricLogitDecisionModel
+from mnms.generation.layers import generate_bbox_origin_destination_layer, generate_matching_origin_destination_layer
+from mnms.generation.layers import generate_bbox_origin_destination_layer
+from mnms.io.graph import save_transit_link_odlayer, load_transit_links
+from mnms.graph.layers import OriginDestinationLayer
+
+from shapely.ops import unary_union
+from shapely.geometry import Point
+import os
+from shapely.geometry import MultiPolygon, box
+from shapely.geometry import shape
+
+
 import logging
 
 
@@ -25,6 +43,26 @@ import logging
 logger = logging.getLogger(__name__)
 
 class NetworkManager:
+    """
+    Creates useful dataframes to harness. Gives access to display methods.
+
+    Attributes
+    ----------
+    _path : string
+        Path to the graph file.
+    _old_crs : string
+        network's original projection system.
+    _crs : string
+        network's actual projection system .
+    _network : dict
+        dictionnary that holds the json file's content.
+    _nodes : gpd.GeoDataFrames
+        GeoDataframe with the following variables : NODE (string, node's name) , GEOMETRY (point, node's position).
+    _sections : gpd.GeoDataFrames
+        GeoDataframe with the following variables : SECTION (string, section's name) , LENGTH (float, section's length), #ZONE (string, section's reservoir), GEOMETRY (LineString, section's position).
+    _links : pd.DataFrames
+        Dataframe with the following variables : SECTION (strig, section's name) , NODES (string,the two nodes forming the #section, in the following format, "upstream downstream").
+    """
 
    # Constructor
     
@@ -38,6 +76,10 @@ class NetworkManager:
             Path to network's file.
         crs : string
             Projection system used in the network's file.
+
+        Returns
+        -------
+        None
         """
         
         # check 
@@ -59,10 +101,11 @@ class NetworkManager:
         self._sections = None #  GeoDataframe with the following variables : SECTION (string, section's name) , LENGTH (float, section's length), #ZONE (string, section's reservoir), GEOMETRY (LineString, section's position) 
         self._links = [] #  Dataframe with the following variables : SECTION (strig, section's name) , NODES (string,the two nodes forming the #section, in the following format, "upstream downstream") 
 
-        logger.info("NetworkManager initialized with path: %s and CRS: %s", path, crs)
-        
+        self.load_network_file()
 
-    
+        logger.info("NetworkManager initialized with path: %s and CRS: %s", path, crs)
+
+        
     # configuration's methods 
     
     # sets up a new network by accessing a new file with its projection system
@@ -76,6 +119,10 @@ class NetworkManager:
             Path to network's file.
         crs : string
             Projection system used in the network's file.
+
+        Returns
+        -------
+        None
         """
         
         # check 
@@ -96,6 +143,8 @@ class NetworkManager:
         self._nodes = None #  GeoDataframe with the following variables : NODE (string, node's name) , GEOMETRY (point, node's position) 
         self._sections = None #  GeoDataframe with the following variables : SECTION (string, section's name) , LENGTH (float, section's length), #ZONE (string, section's reservoir), GEOMETRY (LineString, section's position) 
         self._links = [] #  Dataframe with the following variables : SECTION (strig, section's name) , NODES (string,the two nodes forming the #section, in the following format, "upstream downstream") 
+
+        self.load_network_file()
         
         logger.info(f"path change to {self._path}.")
         logger.info(f"projection system change to {self._crs}.")
@@ -111,6 +160,10 @@ class NetworkManager:
         ----------
         crs : string
             Projection system used in the network's file.
+
+        Returns 
+        -------
+        None
         """
         # check 
         if not crs or crs.strip() == "": 
@@ -130,6 +183,10 @@ class NetworkManager:
         ----------
         crs : string
             Projection system used in the network's file.
+
+        Returns
+        -------
+        None
         """
         
         self._crs = self._old_crs
@@ -146,6 +203,10 @@ class NetworkManager:
         ----------
         crs : string
             Projection system used in the network's file.
+
+        Returns
+        -------
+        None
         """
         
         try:
@@ -154,8 +215,7 @@ class NetworkManager:
                 logger.info("Network file loaded successfully from %s", self._path)
         except Exception as e:
             logger.exception("Failed to load network file: %s", e)
-            raise
-           
+            raise  
 
     
     # creation's methods
@@ -164,7 +224,13 @@ class NetworkManager:
         """
         Creates the nodes dataframe.
     
-        No parameters
+        Parameters
+        ----------
+        None
+        
+        Returns
+        -------
+        None
         """
         
         if not self._network: 
@@ -200,12 +266,17 @@ class NetworkManager:
  
         logger.info("_nodes created.")
 
-
     def create_sections(self):
         """
         Creates the sections dataframe.
     
-        No parameters
+        Parameters
+        ----------
+        None
+        
+        Returns
+        -------
+        None
         """
         
         if not self._network: 
@@ -282,12 +353,17 @@ class NetworkManager:
         
         logger.info("_sections created.")
 
-    
     def create_links(self):
         """
         Creates the links dataframe.
     
-        No parameters
+        Parameters
+        ----------
+        None
+        
+        Returns
+        -------
+        None
         """
         
         if not self._network: 
@@ -332,22 +408,248 @@ class NetworkManager:
         
         logger.info("_links created.")
 
-    
     def create_network_dfs(self):
         """
         Creates the nodes, sections and links dataframe.
     
-        No parameters
+        Parameters
+        ----------
+        None
+        
+        Returns
+        -------
+        None
         """
         
         self.create_nodes()
         self.create_sections()
         self.create_links()
 
+    
+    def create_grid_layers(self, nx=14, ny=16, dist_connection=1000, directory=""):
+        """
+        Creates the od layer and the transit link files with nx*ny nodes and dist_connection then saved them at directory.
+        For the od layer, the bbox method is used : it creates a bbox from the graph file and then adds a grid representing the od layer with 
+        nx*ny nodes. 
+
+        Parameters
+        ----------
+        nx : int
+            Number of nodes per line.
+        ny : int
+            Number of nodes per column.
+        dist_connection : int
+            Used to connect each layer with the graph.
+        directory : 
+            Directory to save the files.
+
+        Returns
+        -------
+        None
+        """
+
+        # check
+        if not directory or directory.strip() == "" : 
+            logger.info("Null or invalid directory.")
+            raise ValueError("Null or invalid directory.")
+
+        NX = nx
+        NY = ny
+        DIST_CONNECTION = dist_connection
+
+        mmgraph = load_graph(self._path)
+        graph_name = Path(self._path).stem
+
+        odlayer = generate_bbox_origin_destination_layer(mmgraph.roads, NX, NY)
+        mmgraph.add_origin_destination_layer(odlayer)
+        mmgraph.connect_origindestination_layers(DIST_CONNECTION)
+        
+        save_odlayer(odlayer, directory + f"/{graph_name}__GridOdLayer__{NX}_{NY}_{DIST_CONNECTION}.json")
+        save_transit_link_odlayer(mmgraph, directory + f"/{graph_name}__GridTransitLink__{NX}_{NY}_{DIST_CONNECTION}.json")
+
+        logger.info(f"Od layer and transit link files created and saved at {directory} with : nx = {nx}, ny : {ny}, dist_connection : {dist_connection}.")
+
+    def create_layer_layer(self,dist_connection=0, directory=""):
+        """
+        Create an od layer and a transit layer file with the restricted graph at graph file in the demand area and the dist_connection and saved them at directory.
+        All the file must have the same projection system.
+    
+        Parameters
+        ----------
+        dist_connection : int
+            Used to connect each layer with the graph.
+        directory : 
+            Directory to save the files.
+
+        Returns
+        -------
+        None
+        """
+
+        # check
+        if not dist_connection or dist_connection == 0 : 
+            logger.info("Invalid or null dist connection.")
+            raise ValueError("Invalid or null dist connection.")
+        if not directory or directory.strip()=="":
+            logger.info("Invalid or null directory.")
+            raise ValueError("Invalid or null directory.")  
+
+        network = []
+        with open(self._path, 'r') as graph_file:
+                    network = json.load(graph_file)
+
+        buffer = pd.DataFrame(network["ROADS"]["NODES"].values()).copy()
+        buffer["position"] = buffer["position"].astype(str).str.extract(r'\[(.*?)\]')
+        buffer[["x", "y"]] = buffer["position"].str.split(",", expand=True).astype(float)
+        buffer["GEOMETRY"] = gpd.points_from_xy(buffer["x"], buffer["y"])
+        #buffer.drop(columns=["position", "x", "y"], inplace=True)
+        buffer.drop(columns=["position"], inplace=True)
+        buffer.rename(columns={"id":"NODE"},inplace=True)
+        inner_graph = gpd.GeoDataFrame(buffer, geometry="GEOMETRY", crs=self._crs)
+
+        # Générer les dictionnaires
+        origins = {f"ORIGIN_{i}": [row.GEOMETRY.x, row.GEOMETRY.y] for i, row in inner_graph.iterrows()}
+        destinations = {f"DESTINATION_{i}": [row.GEOMETRY.x, row.GEOMETRY.y] for i, row in inner_graph.iterrows()}
+
+        odlayer = OriginDestinationLayer()
+
+        for i, row in inner_graph.iterrows():
+            odlayer.create_origin_node(f"ORIGIN_{i}", [row.GEOMETRY.x, row.GEOMETRY.y])
+
+        for i, row in inner_graph.iterrows():
+            odlayer.create_destination_node(f"DESTINATION_{i}",[row.GEOMETRY.x, row.GEOMETRY.y])
+
+    
+        if "m" in network['LAYERS'][0]['MAP_ROADDB']['LINKS'].values() : print("test")
+
+        mmgraph = load_graph(self._path)
+        graph_name = Path(self._path).stem
+
+        mmgraph.add_origin_destination_layer(odlayer)
+        mmgraph.connect_origindestination_layers(dist_connection)
+        
+        save_odlayer(odlayer, directory + f"/{graph_name}__LayerOdLayer__{dist_connection}.json")
+        save_transit_link_odlayer(mmgraph, directory + f"/{graph_name}__LayerTransitLink__{dist_connection}.json")
+
+        logger.info(f"Od layer and transit link files created and saved at {directory} with : demand area : Restricted, graph : {self._path}, dist_connection : {dist_connection}.")
+
+
+
+    def restrict_graph(self, demand_area_path: str, crs: str, output_path: str, distance=0, name="test_graph"):
+        """
+        Restrict a graph file to the area of the file saved at demand_area_path.
+
+        Parameters
+        ----------
+        demand_area_path : str
+            Relative path to the area file.
+        crs : str
+            Projection system as string.
+        output_path : str
+            Relative path to save the new graph.
+        distance : int
+            Distance buffer.
+        name : str
+            Name of the new graph file.
+            
+        Returns
+        -------
+        None
+        """
+        # --- 1. Read the demand area and project to target CRS ---
+        demand_area = gpd.read_file(demand_area_path)
+        global_demand_area = unary_union(demand_area.geometry)
+   
+        global_demand_area = shape(global_demand_area)
+        global_demand_area = global_demand_area.buffer( distance )
+        
+        global_demand_area_gdf = gpd.GeoDataFrame(
+            geometry=[global_demand_area],
+            crs=demand_area.crs
+        ).to_crs(crs)
+
+        # Utility function to check if a point is inside the demand area
+        def is_in_demand_area(coords):
+            point = Point(coords)
+            return global_demand_area_gdf.geometry.iloc[0].contains(point)
+
+        # --- 2. Load the graph JSON ---
+        with open(self._path, 'r', encoding='utf-8') as f:
+            graph = json.load(f)
+
+        # --- 3. Filter ROADS/NODES ---
+        new_nodes = {nid: nd for nid, nd in graph['ROADS']['NODES'].items() if is_in_demand_area(nd['position'])}
+        graph['ROADS']['NODES'] = new_nodes
+
+        # --- 4. Filter SECTIONS ---
+        new_sections = {sid: sd for sid, sd in graph['ROADS']['SECTIONS'].items()
+                        if sd.get('upstream') in new_nodes and sd.get('downstream') in new_nodes}
+        graph['ROADS']['SECTIONS'] = new_sections
+
+        # --- 5. Filter ZONES/RES sections ---
+        if 'RES' in graph['ROADS']['ZONES']:
+            zone_res = graph['ROADS']['ZONES']['RES']
+            zone_res['sections'] = [s for s in zone_res['sections'] if s in new_sections]
+            minx, miny, maxx, maxy = global_demand_area_gdf.total_bounds
+
+            zone_res["contour"] = [
+            [minx, miny],  # bas-gauche
+            [maxx, miny],  # bas-droit
+            [maxx, maxy],  # haut-droit
+            [minx, maxy],  # haut-gauche
+        ]
+
+
+        # --- 6. Filter LAYERS[0] ---
+        layer0 = graph['LAYERS'][0]
+
+        # NODES: keep only those whose ID is in new_nodes and reindex with consecutive integers
+        kept_nodes = [nd for nd in layer0['NODES'] if nd['ID'] in new_nodes]
+        new_layer_nodes = []
+    #new_layer_nodes = {}
+        for idx, nd in enumerate(kept_nodes):
+            #new_layer_nodes[str(idx)] = nd  # copy value as-is
+            new_layer_nodes.append(nd)
+        layer0['NODES'] = new_layer_nodes
+
+        # LINKS: keep only those whose ID is in new_sections and reindex with consecutive integers
+        kept_links = [lk for lk in layer0['LINKS'] if lk['ID'] in new_sections]
+        new_layer_links = []
+        #new_layer_links = {}
+        for idx, lk in enumerate(kept_links):
+            #new_layer_links[str(idx)] = lk  # copy value as-is
+            new_layer_links.append(lk)
+            if lk["ID"] == "m" : print("test")
+        layer0['LINKS'] = new_layer_links
+
+    
+    
+        # MAP_ROADDB: rebuild NODES and LINKS with ID as both key and value
+        map_roaddb = layer0.get('MAP_ROADDB', {})
+        #map_roaddb['NODES'] = {nd['ID']: nd['ID'] for nd in new_layer_nodes.values()}
+        #map_roaddb['LINKS'] = {lk['ID']: lk['ID'] for lk in new_layer_links.values()}
+        map_roaddb['NODES'] = {nd['ID']: nd['ID'] for nd in new_layer_nodes}
+        map_roaddb['LINKS'] = {lk['ID']: [lk['ID']] for lk in new_layer_links}
+        layer0['MAP_ROADDB'] = map_roaddb
+    
+        if "m" in map_roaddb['LINKS'] : print("test")
+
+        # Update LAYERS[0]
+        graph['LAYERS'][0] = layer0
+
+    
+        #print(graph['LAYERS'][0]['MAP_ROADDB']['LINKS'])
+        #print(graph)
+
+        # --- 7. Save the restricted graph ---
+        os.makedirs(output_path, exist_ok=True)
+        output_path = os.path.join(output_path, f"{name}_{distance}.json")
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(graph, f, indent=4, ensure_ascii=False)
+
+        print(f"Restricted graph saved to: {output_path}")
 
     # display
-
-  
 
     def plot_nodes_map(
         self,
@@ -427,11 +729,6 @@ class NetworkManager:
         # Display the figure
         # ------------------------------------------------------------------
         fig.show()
-
-
-
-
-
 
     def plot_sections_map(
         self,
@@ -513,10 +810,6 @@ class NetworkManager:
         # Display the figure
         # ------------------------------------------------------------------
         fig.show()
-
-
-
-
 
     def plot_origins_json(self,
         json_file,
@@ -601,9 +894,6 @@ class NetworkManager:
 
         fig.show()
 
-
-
-
     def plot_destinations_json(self,
         json_file,
         crs="EPSG:2154",
@@ -642,7 +932,7 @@ class NetworkManager:
 
         destinations = []
         for key, coords in data["DESTINATIONS"].items():
-            x, y = coords["0"], coords["1"]
+            x, y = coords[0], coords[1]
             destinations.append(Point(x, y))
 
         # ------------------------------------------------------------------
@@ -687,7 +977,6 @@ class NetworkManager:
 
         fig.show()
 
-    
     
     # getters 
 

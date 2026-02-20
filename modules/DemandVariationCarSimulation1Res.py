@@ -1,3 +1,4 @@
+
 # dependencies
 
 import os
@@ -58,7 +59,10 @@ class DemandVariationCarSimulation1Res:
             Relative path to a folder containing MnMS demand files.
         graph_path : str
             Relative path to the graph file.
-        
+
+        Returns
+        -------
+        None
         """
 
         # check
@@ -97,6 +101,10 @@ class DemandVariationCarSimulation1Res:
         ----------
         input_path : str
             Relative path to a folder containing MnMS demand files.
+
+        Returns
+        -------
+        None
         """
 
         # check
@@ -124,6 +132,10 @@ class DemandVariationCarSimulation1Res:
         ----------
         graph_path : str
             Relative path to the graph file.
+
+        Returns
+        -------
+        None
         """
 
         if not graph_path or graph_path.strip == "" :
@@ -148,6 +160,10 @@ class DemandVariationCarSimulation1Res:
             Used to connect each layer with the graph.
         directory : 
             Directory to save the files.
+
+        Returns
+        -------
+        None
         """
 
         # check
@@ -190,6 +206,10 @@ class DemandVariationCarSimulation1Res:
             MFD variables for a single reservoir with only cars.
         output_directory : str
             Directory to save the simulation outputs.
+
+        Returns
+        -------
+        None
         """
 
         # check
@@ -239,6 +259,7 @@ class DemandVariationCarSimulation1Res:
             V = max(V, 0.001)  # min speed to avoid gridlock
             return {"CAR": V}
 
+
         # simulation for each demand file
         for i in range(len(self._inputs)):
             
@@ -251,8 +272,11 @@ class DemandVariationCarSimulation1Res:
             # network defintion
             mmgraph = load_graph(self._graph_path)
             odlayer = load_odlayer(od_layer_path)
+        
             mmgraph.add_origin_destination_layer(odlayer)
+         
             load_transit_links(mmgraph, transit_link_path)
+   
  
             # layer
             personal_car = PersonalMobilityService("CAR")
@@ -279,7 +303,7 @@ class DemandVariationCarSimulation1Res:
             if decision_model == "CentricLogit" : 
                 travel_decision = ModeCentricLogitDecisionModel(mmgraph, ["Car"], outfile=outdir / "path.csv")
             
-
+            attach_log_file(outdir / 'simulation.log')
             supervisor = Supervisor(graph=mmgraph,
                                     flow_motor=flow_motor,
                                     demand=demand,
@@ -293,7 +317,7 @@ class DemandVariationCarSimulation1Res:
 
             supervisor.run(Time(start_time), Time(end_time), Dt(minutes=1), 10)
 
-            logger.info(f"{i+1}e simulation with input {self._inputs[i]} done.")
+            logger.info(f"{i+1}e simulation with input {self._inputs[i]} done, saved at {outdir}.")
 
         logger.info("Simulations done.")
 

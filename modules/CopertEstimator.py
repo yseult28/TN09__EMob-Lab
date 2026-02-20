@@ -18,16 +18,14 @@ from shapely.geometry import Point
 from shapely.geometry import LineString
 from shapely.geometry import Polygon
 
-
-
-
-
 import logging
+
 
 
 
 # log
 logger = logging.getLogger(__name__)
+
 
 # useful fonctions
 
@@ -162,6 +160,7 @@ def build_linestring(geoms):
     ----------
     geoms : list
         The list of points.
+        
     Returns
     -------
     LineString(coords) : LineString
@@ -217,6 +216,10 @@ class CopertEstimator():
             Projection system of the given simulation.
         _copert_data_path : str
             Path to the copert data file.
+
+        Returns
+        -------
+        None
         """
 
         # check
@@ -260,6 +263,10 @@ class CopertEstimator():
             File name (default = "").
         path : str, optional
             Path to save _estimation (default = "").
+
+        Returns
+        -------
+        None
         """
 
         # check
@@ -316,7 +323,6 @@ class CopertEstimator():
 
     # copert
 
-
     def copert_estimation(self, period="auto", method="SPEED_MEAN") :
         """
         Estimates Nox and CO2 emissions with Copert method and temporal aggregation.
@@ -328,6 +334,10 @@ class CopertEstimator():
         method : str, optionnal
             Speed calculation method name, SPEED uses the mean of the SPEED variable, DISTANCE calculates the relative distance value divided 
             the period (default:"SPEED").
+
+        Returns
+        -------
+        None
         """
 
         # check
@@ -419,6 +429,7 @@ class CopertEstimator():
         row : Series
             row used for calculation.
             It must have the following columns : TYPE, SPEED, TRAVEL_TIME, COUNT
+            
         Returns
         -------
         NOX value : float
@@ -463,6 +474,7 @@ class CopertEstimator():
         row : Series
             row used for calculation.
             It must have the following columns : TYPE, SPEED, TRAVEL_TIME, COUNT
+            
         Returns
         -------
         CO2 value : float
@@ -638,7 +650,7 @@ class CopertEstimator():
         -------
         float
             Total CO2 emissions after filters.
-    """
+        """
 
         # check
         if self._estimation.empty:
@@ -738,7 +750,245 @@ class CopertEstimator():
         return total_co2
 
 
-    def copert_parameters_analysis(self, periods=["3min","6min","10min"]):
+    def get_mean_speed(self, period=None, area=None, mobility_services=None):
+        """
+        Get mean speed by period, area and mobility services. If None takes all.
+
+        Parameters
+        ----------
+        period : None or [str, str]
+            Time period as strings "HH:MM:SS". Only the hour part is used.
+            Example: ["08:00:00", "10:30:00"]
+            If None → entire dataset.
+        area : None or shapely Polygon
+            Spatial filtering polygon.
+        mobility_services : None or list[str]
+            TYPE values to keep.
+
+        Returns
+        -------
+        float
+            Mean speed after filters.
+        """
+
+        # check
+        if self._estimation.empty:
+            logger.info("_estimation is empty.")
+            raise ValueError("_estimation is empty.")
+
+        df = self._estimation.copy()
+
+        if period is not None:
+            if (
+                not isinstance(period, (list, tuple))
+                or len(period) != 2
+                or not all(isinstance(x, str) for x in period)
+            ):
+                raise ValueError(
+                    "period must be None or ['HH:MM:SS', 'HH:MM:SS']"
+                )
+
+            start_str, end_str = period
+
+            # Convert strings to Python time objects
+            try:
+                start_t = pd.to_datetime(start_str).time()
+                end_t   = pd.to_datetime(end_str).time()
+            except Exception:
+                raise ValueError("Invalid time format for period. Expected 'HH:MM:SS'")
+
+            # Extract TIME as pure time (hours only)
+            #df["HOUR"] = df["TIME"].dt.time
+
+            # Case 1 — normal interval (08:00:00 → 12:00:00)
+            #if start_t <= end_t:
+                #mask = (df["HOUR"] >= start_t) & (df["HOUR"] <= end_t)
+            # Case 2 — interval crossing midnight (23:00:00 → 02:00:00)
+            #else:
+                #mask = (df["HOUR"] >= start_t) | (df["HOUR"] <= end_t)
+
+            #df = df[mask].drop(columns="HOUR")
+
+            t_end = df["TIME"] + df["PERIOD"]
+
+            if start_t <= end_t:
+                mask = (
+                    (df["TIME"].dt.time >= start_t) &
+                    (t_end.dt.time <= end_t)
+                )
+            else:
+                mask = (
+                    (df["TIME"].dt.time >= start_t) |
+                    (t_end.dt.time <= end_t)
+                )
+            df = df[mask]
+
+            if df.empty:
+                raise ValueError("No data found for the given hourly period.")
+
+        if area is not None:
+            if not isinstance(area, Polygon):
+                raise ValueError("area must be a shapely Polygon")
+
+            # .within works with LINESTRING (it checks if the whole line is inside)
+            df = df[df["GEOMETRY"].within(area)]
+
+            if df.empty:
+                raise ValueError("No data found in the given spatial area.")
+
+        if mobility_services is not None:
+            if not (
+                isinstance(mobility_services, (list, tuple))
+                and all(isinstance(x, str) for x in mobility_services)
+            ):
+                raise ValueError("mobility_services must be None or list[str]")
+
+            available = df["TYPE"].unique()
+
+            if not any(ms in available for ms in mobility_services):
+                raise ValueError(
+                    f"No TYPE values match mobility_services {mobility_services}. "
+                    f"Available types: {list(available)}"
+                )
+
+            df = df[df["TYPE"].isin(mobility_services)]
+
+            if df.empty:
+                raise ValueError("No data left after mobility_services filtering.")
+
+        if "SPEED" not in df.columns:
+            raise ValueError("Column SPEED is missing from _estimation.")
+
+        mean_speed = df["SPEED"].mean()
+
+        logger.info(
+            f"Mean speed calculation done with period={period if period else 'all'}, area={area if area else 'all'}, "
+            f"services={mobility_services}, mean speed = {mean_speed}"
+        )
+
+        return mean_speed
+
+    def get_mean_distance(self, period=None, area=None, mobility_services=None):
+        """
+        Get mean distance by period, area and mobility services. If None takes all.
+
+        Parameters
+        ----------
+        period : None or [str, str]
+            Time period as strings "HH:MM:SS". Only the hour part is used.
+            Example: ["08:00:00", "10:30:00"]
+            If None → entire dataset.
+        area : None or shapely Polygon
+            Spatial filtering polygon.
+        mobility_services : None or list[str]
+            TYPE values to keep.
+
+        Returns
+        -------
+        float
+            Mean distance after filters.
+        """
+
+        # check
+        if self._estimation.empty:
+            logger.info("_estimation is empty.")
+            raise ValueError("_estimation is empty.")
+
+        df = self._estimation.copy()
+
+        if period is not None:
+            if (
+                not isinstance(period, (list, tuple))
+                or len(period) != 2
+                or not all(isinstance(x, str) for x in period)
+            ):
+                raise ValueError(
+                    "period must be None or ['HH:MM:SS', 'HH:MM:SS']"
+                )
+
+            start_str, end_str = period
+
+            # Convert strings to Python time objects
+            try:
+                start_t = pd.to_datetime(start_str).time()
+                end_t   = pd.to_datetime(end_str).time()
+            except Exception:
+                raise ValueError("Invalid time format for period. Expected 'HH:MM:SS'")
+
+            # Extract TIME as pure time (hours only)
+            #df["HOUR"] = df["TIME"].dt.time
+
+            # Case 1 — normal interval (08:00:00 → 12:00:00)
+            #if start_t <= end_t:
+                #mask = (df["HOUR"] >= start_t) & (df["HOUR"] <= end_t)
+            # Case 2 — interval crossing midnight (23:00:00 → 02:00:00)
+            #else:
+                #mask = (df["HOUR"] >= start_t) | (df["HOUR"] <= end_t)
+
+            #df = df[mask].drop(columns="HOUR")
+
+            t_end = df["TIME"] + df["PERIOD"]
+
+            if start_t <= end_t:
+                mask = (
+                    (df["TIME"].dt.time >= start_t) &
+                    (t_end.dt.time <= end_t)
+                )
+            else:
+                mask = (
+                    (df["TIME"].dt.time >= start_t) |
+                    (t_end.dt.time <= end_t)
+                )
+            df = df[mask]
+
+            if df.empty:
+                raise ValueError("No data found for the given hourly period.")
+
+        if area is not None:
+            if not isinstance(area, Polygon):
+                raise ValueError("area must be a shapely Polygon")
+
+            # .within works with LINESTRING (it checks if the whole line is inside)
+            df = df[df["GEOMETRY"].within(area)]
+
+            if df.empty:
+                raise ValueError("No data found in the given spatial area.")
+
+        if mobility_services is not None:
+            if not (
+                isinstance(mobility_services, (list, tuple))
+                and all(isinstance(x, str) for x in mobility_services)
+            ):
+                raise ValueError("mobility_services must be None or list[str]")
+
+            available = df["TYPE"].unique()
+
+            if not any(ms in available for ms in mobility_services):
+                raise ValueError(
+                    f"No TYPE values match mobility_services {mobility_services}. "
+                    f"Available types: {list(available)}"
+                )
+
+            df = df[df["TYPE"].isin(mobility_services)]
+
+            if df.empty:
+                raise ValueError("No data left after mobility_services filtering.")
+
+        if "DISTANCE" not in df.columns:
+            raise ValueError("Column DISTANCE is missing from _estimation.")
+
+        mean_distance = df["DISTANCE"].mean()
+
+        logger.info(
+            f"Mean distance calculation done with period={period if period else 'all'}, area={area if area else 'all'}, "
+            f"services={mobility_services}, mean distance = {mean_distance}"
+        )
+
+        return mean_distance
+
+
+
+    def copert_parameters_analysis(self, periods=["auto","3min","6min","10min"]):
         """
         Estimates emissions for all combinations of time interval in period and method in self._methods.
         Return a dataframe with column PERIOD, METHOD, NOX, CO2.
@@ -761,22 +1011,26 @@ class CopertEstimator():
         for period in periods:
             for method in methods:
                 self.copert_estimation(period=period, method=method)
-                row = {
-                "PERIOD": freq_to_seconds(period) / 3600,
-                "METHOD": method,
-                "NOX":   self.get_nox(),
-                "CO2":   self.get_co2()
-                }
+                if period == "auto" : 
+                    row = {
+                    "PERIOD": 0,
+                    "METHOD": method,
+                    "NOX":   self.get_nox(),
+                    "CO2":   self.get_co2()
+                    }
+                else : 
+                    row = {
+                    "PERIOD": freq_to_seconds(period) / 3600,
+                    "METHOD": method,
+                    "NOX":   self.get_nox(),
+                    "CO2":   self.get_co2()
+                    }
 
                 analysis_df = pd.concat([analysis_df, pd.DataFrame([row])], ignore_index=True)
 
 
         logger.info(f"Copert parameters analysis with periods : {periods} and methods : {self._methods}.")
         return analysis_df.copy()
-
-
-
-
 
 
     # getters
